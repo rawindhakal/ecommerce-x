@@ -9,4 +9,5 @@ build/
 uploads/
 .turbo/
 coverage/
+*.tsbuildinfo
 packages/db/generated/
