@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.btn-outline {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.btn-danger {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100;
+}
+
+.input {
+  @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100;
+}
+
+.label {
+  @apply mb-1 block text-xs font-medium text-slate-500;
+}
+
+.card {
+  @apply rounded-xl border border-slate-200 bg-white;
+}
+
+.table-base {
+  @apply w-full text-left text-sm;
+}
+.table-base th {
+  @apply border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500;
+}
+.table-base td {
+  @apply border-b border-slate-100 px-4 py-3;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+/* Professional dark POS terminal theme, scoped to .pos-theme so it never
+   leaks into the rest of the (light) admin panel. */
+.pos-theme {
+  --pos-bg: #0b0e13;
+  --pos-card: #12161d;
+  --pos-surface: #1a2029;
+  --pos-surface-hover: #232a35;
+  --pos-surface-strong: #2a3240;
+  --pos-line: #262e3a;
+  --pos-text: #f5f7fa;
+  --pos-text-80: rgba(245, 247, 250, 0.8);
+  --pos-text-70: rgba(245, 247, 250, 0.7);
+  --pos-text-60: rgba(245, 247, 250, 0.6);
+  --pos-text-50: rgba(245, 247, 250, 0.5);
+  --pos-text-40: rgba(245, 247, 250, 0.4);
+  --pos-text-30: rgba(245, 247, 250, 0.3);
+  --pos-green: #2ecc71;
+  --pos-green-hover: #28b463;
+  --pos-red: #e74c3c;
+  --pos-orange: #f39c12;
+  --pos-brand: #c2185b;
+  background: var(--pos-bg);
+  color: var(--pos-text);
+  min-height: 100dvh;
+}
+.pos-theme ::placeholder {
+  color: var(--pos-text-40);
+}
+
+/* 80mm receipt printing: #pos-receipt is always mounted off-screen (see
+   Receipt80mm component) so it can be printed without a popup window. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #pos-receipt,
+  #pos-receipt * {
+    visibility: visible;
+  }
+  #pos-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+  }
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+}

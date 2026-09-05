@@ -1,0 +1,21 @@
+{
+  "name": "ecommerce-x",
+  "private": true,
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel -r dev",
+    "dev:api": "pnpm --filter @ecommerce-x/api dev",
+    "dev:web": "pnpm --filter @ecommerce-x/web dev",
+    "dev:admin": "pnpm --filter @ecommerce-x/admin dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "db:generate": "pnpm --filter @ecommerce-x/db generate",
+    "db:migrate": "pnpm --filter @ecommerce-x/db migrate",
+    "db:seed": "pnpm --filter @ecommerce-x/db seed",
+    "db:studio": "pnpm --filter @ecommerce-x/db studio"
+  }
+}
