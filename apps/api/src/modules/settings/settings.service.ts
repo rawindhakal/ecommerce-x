@@ -1,17 +1,30 @@
 import { prisma } from "@ecommerce-x/db";
 import { encryptJson, decryptJson } from "../../lib/encryption.js";
 
+// A single row whose isSecret flag and stored value shape disagree (e.g. a
+// dev-reseed race, or manual DB edit) must not 500 every settings read for
+// the whole app — branding/SEO/logo all come through this same path. Fall
+// back to the raw value and log, rather than throwing mid-loop.
+function safeDecrypt<T>(row: { group: string; key: string; value: unknown }): T {
+  try {
+    return decryptJson<T>(row.value as string);
+  } catch (err) {
+    console.error(`Setting ${row.group}.${row.key} is marked isSecret but isn't validly encrypted; returning raw value.`, err);
+    return row.value as T;
+  }
+}
+
 export async function getSetting<T = unknown>(group: string, key: string): Promise<T | null> {
   const row = await prisma.setting.findUnique({ where: { group_key: { group, key } } });
   if (!row) return null;
-  return row.isSecret ? decryptJson<T>(row.value as unknown as string) : ((row.value as unknown) as T);
+  return row.isSecret ? safeDecrypt<T>(row) : ((row.value as unknown) as T);
 }
 
 export async function getSettingsGroup(group: string): Promise<Record<string, unknown>> {
   const rows = await prisma.setting.findMany({ where: { group } });
   const out: Record<string, unknown> = {};
   for (const row of rows) {
-    out[row.key] = row.isSecret ? decryptJson(row.value as unknown as string) : row.value;
+    out[row.key] = row.isSecret ? safeDecrypt(row) : row.value;
   }
   return out;
 }
@@ -21,7 +34,7 @@ export async function getAllSettings(): Promise<Record<string, Record<string, un
   const out: Record<string, Record<string, unknown>> = {};
   for (const row of rows) {
     out[row.group] ??= {};
-    out[row.group]![row.key] = row.isSecret ? decryptJson(row.value as unknown as string) : row.value;
+    out[row.group]![row.key] = row.isSecret ? safeDecrypt(row) : row.value;
   }
   return out;
 }

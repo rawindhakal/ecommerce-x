@@ -78,9 +78,7 @@ function toBasketItem(v: PosVariant): BasketItem {
 
 export default function PosPage() {
   const [session, setSession] = useState<Session | null>(null);
-  const [locations, setLocations] = useState<Location[]>([]);
   const [openingBalance, setOpeningBalance] = useState("1000");
-  const [selectedLocation, setSelectedLocation] = useState("");
   const [settings, setSettings] = useState<StoreSettings>({});
   const [loyaltyRule, setLoyaltyRule] = useState<LoyaltyRule | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -120,11 +118,6 @@ export default function PosPage() {
 
   useEffect(() => {
     api.get<Session>("/api/pos/sessions/current").then(setSession);
-    api.get<Location[]>("/api/locations").then((locs) => {
-      setLocations(locs);
-      const store = locs.find((l) => l.type === "STORE");
-      if (store) setSelectedLocation(store.id);
-    });
     api.get<StoreSettings>("/api/settings/public").then(setSettings);
     api.get<LoyaltyRule>("/api/loyalty/rules").then(setLoyaltyRule);
   }, []);
@@ -161,7 +154,7 @@ export default function PosPage() {
 
   async function openSession(e: React.FormEvent) {
     e.preventDefault();
-    const s = await api.post<Session>("/api/pos/sessions/open", { locationId: selectedLocation, openingBalance: Number(openingBalance) });
+    const s = await api.post<Session>("/api/pos/sessions/open", { openingBalance: Number(openingBalance) });
     setSession(s);
   }
 
@@ -284,7 +277,6 @@ export default function PosPage() {
     setError(null);
     try {
       const res = await api.post<any>("/api/pos/sale", {
-        locationId: session.locationId,
         items: basket.map((b) => ({ variantId: b.variantId, quantity: b.quantity })),
         customerId: customer?.id,
         customerName: billTo.name || "Walk-in Customer",
@@ -360,18 +352,6 @@ export default function PosPage() {
           </Link>
           <h1 className="text-xl font-bold">Open POS Session</h1>
           <form onSubmit={openSession} className="mt-5 space-y-4">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-[var(--pos-text-50)]">Store Location</label>
-              <select
-                required
-                className="w-full rounded-lg border border-[var(--pos-line)] bg-[var(--pos-surface)] px-3 py-2.5 text-sm"
-                value={selectedLocation}
-                onChange={(e) => setSelectedLocation(e.target.value)}
-              >
-                <option value="">Select location</option>
-                {locations.filter((l) => l.type === "STORE").map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-[var(--pos-text-50)]">Opening Cash Balance</label>
               <input

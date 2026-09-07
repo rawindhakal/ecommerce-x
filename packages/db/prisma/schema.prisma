@@ -144,6 +144,11 @@ model User {
   loyaltyPoints     Int       @default(0)
   avatarUrl         String?
   lastLoginAt       DateTime?
+  // Per-account brute-force lockout — separate from the IP-based rate
+  // limiter, which alone can't stop a distributed attacker hammering one
+  // specific known phone number from many IPs.
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -713,18 +718,25 @@ model Page {
 }
 
 model Banner {
-  id          String          @id @default(cuid())
-  title       String
-  imageUrl    String
+  id             String          @id @default(cuid())
+  title          String
+  subtitle       String?
+  ctaText        String?
+  imageUrl       String
   mobileImageUrl String?
-  linkUrl     String?
-  placement   BannerPlacement @default(HOME_HERO)
-  sortOrder   Int             @default(0)
-  isActive    Boolean         @default(true)
-  startsAt    DateTime?
-  endsAt      DateTime?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  linkUrl        String?
+  placement      BannerPlacement @default(HOME_HERO)
+  // Only meaningful for CATEGORY_TOP: scopes the banner to one category's
+  // page instead of showing on every category page. Null = show on all.
+  categorySlug   String?
+  textPosition   String          @default("left") // left | center | right
+  theme          String          @default("light") // light | dark — controls text/button contrast against the image
+  sortOrder      Int             @default(0)
+  isActive       Boolean         @default(true)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([placement])
   @@map("banners")

@@ -4,11 +4,12 @@ import { prisma } from "@ecommerce-x/db";
 import { COOKIE_NAMES } from "@ecommerce-x/shared";
 import { asyncHandler } from "../../middleware/async-handler.js";
 import { requireAuth } from "../../middleware/auth.js";
-import { hashPassword, verifyPassword } from "../../lib/password.js";
+import { hashPassword, verifyPassword, passwordSchema } from "../../lib/password.js";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../lib/jwt.js";
 import { HttpError } from "../../lib/http-error.js";
 import { env } from "../../config/env.js";
 import { authLimiter } from "../../middleware/rate-limit.js";
+import { logAudit } from "../../lib/audit-log.js";
 import { createHash } from "node:crypto";
 
 export const authRouter = Router();
@@ -51,7 +52,7 @@ const phoneSchema = z.string().trim().min(7, "Enter a valid phone number").max(2
 
 const registerSchema = z.object({
   phone: phoneSchema,
-  password: z.string().min(8),
+  password: passwordSchema,
   firstName: z.string().min(1),
   lastName: z.string().min(1).optional(),
   email: z.string().email().optional().or(z.literal("")),
@@ -93,6 +94,32 @@ async function findByIdentifier(identifier: { phone?: string; email?: string }) 
   return null;
 }
 
+// The IP-based authLimiter alone can't stop a distributed attacker (many
+// IPs / a botnet) from brute-forcing one specific known phone number
+// indefinitely. This adds a per-account counter that locks the account
+// itself for a cooldown period, independent of which IP is attempting it.
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const ACCOUNT_LOCKOUT_MS = 15 * 60 * 1000;
+
+function assertAccountNotLocked(user: { lockedUntil: Date | null }) {
+  if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+    const minutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+    throw HttpError.unauthorized(`Too many failed attempts on this account. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`);
+  }
+}
+
+async function recordFailedLogin(userId: string, ip: string | undefined) {
+  const updated = await prisma.user.update({ where: { id: userId }, data: { failedLoginCount: { increment: 1 } } });
+  if (updated.failedLoginCount >= MAX_FAILED_LOGIN_ATTEMPTS) {
+    await prisma.user.update({ where: { id: userId }, data: { lockedUntil: new Date(Date.now() + ACCOUNT_LOCKOUT_MS), failedLoginCount: 0 } });
+    await logAudit({ userId, action: "account.locked", entityType: "User", entityId: userId, metadata: { reason: "too many failed login attempts" }, ipAddress: ip });
+  }
+}
+
+async function clearFailedLogins(userId: string) {
+  await prisma.user.update({ where: { id: userId }, data: { failedLoginCount: 0, lockedUntil: null } });
+}
+
 authRouter.post(
   "/login",
   authLimiter,
@@ -100,8 +127,13 @@ authRouter.post(
     const { phone, email, password } = loginSchema.parse(req.body);
     const user = await findByIdentifier({ phone, email });
     if (!user || !user.passwordHash || !user.isActive) throw HttpError.unauthorized("Invalid phone number or password");
+    assertAccountNotLocked(user);
     const valid = await verifyPassword(password, user.passwordHash);
-    if (!valid) throw HttpError.unauthorized("Invalid phone number or password");
+    if (!valid) {
+      await recordFailedLogin(user.id, req.ip);
+      throw HttpError.unauthorized("Invalid phone number or password");
+    }
+    await clearFailedLogins(user.id);
 
     const accessToken = await issueSession(res, user);
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
@@ -118,8 +150,13 @@ authRouter.post(
     const user = await findByIdentifier({ phone, email });
     if (!user || !user.passwordHash || !user.isActive) throw HttpError.unauthorized("Invalid phone number or password");
     if (user.role === "CUSTOMER") throw HttpError.forbidden("This account does not have staff access");
+    assertAccountNotLocked(user);
     const valid = await verifyPassword(password, user.passwordHash);
-    if (!valid) throw HttpError.unauthorized("Invalid phone number or password");
+    if (!valid) {
+      await recordFailedLogin(user.id, req.ip);
+      throw HttpError.unauthorized("Invalid phone number or password");
+    }
+    await clearFailedLogins(user.id);
 
     const accessToken = await issueSession(res, user);
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
@@ -141,7 +178,20 @@ authRouter.post(
     }
 
     const stored = await prisma.refreshToken.findUnique({ where: { tokenHash: tokenHash(token) } });
-    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+    if (!stored) throw HttpError.unauthorized("Refresh token expired or revoked");
+
+    // A refresh token that was already rotated/revoked being presented
+    // again means either a duplicate request race, or someone replaying a
+    // stolen copy after the legitimate user already moved past it. Since we
+    // can't tell those apart, treat it as a compromise signal and revoke
+    // every one of this user's sessions rather than just this one token —
+    // otherwise a still-valid token the real thief also holds keeps working.
+    if (stored.revokedAt) {
+      await prisma.refreshToken.updateMany({ where: { userId: stored.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      await logAudit({ userId: stored.userId, action: "auth.refresh_token_reuse_detected", metadata: { ip: req.ip }, ipAddress: req.ip });
+      throw HttpError.unauthorized("Refresh token expired or revoked");
+    }
+    if (stored.expiresAt < new Date()) {
       throw HttpError.unauthorized("Refresh token expired or revoked");
     }
 

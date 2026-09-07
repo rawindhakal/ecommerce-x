@@ -4,7 +4,7 @@ import { prisma } from "@ecommerce-x/db";
 import { asyncHandler } from "../../middleware/async-handler.js";
 import { requireAuth, requireRole, POS_ROLES } from "../../middleware/auth.js";
 import { HttpError } from "../../lib/http-error.js";
-import { deductStockAcrossLocations, getAvailableStock } from "../inventory/inventory.service.js";
+import { deductStockAcrossLocations, getAvailableStock, getTheLocationId } from "../inventory/inventory.service.js";
 import { generateOrderNumber } from "../orders/orders.service.js";
 import { earnPointsForOrder, redeemPointsForOrder, maxRedeemablePoints, getLoyaltyRule } from "../loyalty/loyalty.service.js";
 
@@ -91,7 +91,7 @@ posRouter.post(
 );
 
 // ---- Session management ----
-const openSessionSchema = z.object({ locationId: z.string(), openingBalance: z.number().nonnegative() });
+const openSessionSchema = z.object({ openingBalance: z.number().nonnegative() });
 
 posRouter.post(
   "/sessions/open",
@@ -100,8 +100,9 @@ posRouter.post(
     const existing = await prisma.posSession.findFirst({ where: { cashierId: req.user!.id, closedAt: null } });
     if (existing) throw HttpError.conflict("You already have an open POS session");
 
+    const locationId = await getTheLocationId();
     const session = await prisma.posSession.create({
-      data: { locationId: data.locationId, cashierId: req.user!.id, openingBalance: data.openingBalance },
+      data: { locationId, cashierId: req.user!.id, openingBalance: data.openingBalance },
       include: { location: true },
     });
     res.status(201).json(session);
@@ -175,7 +176,6 @@ posRouter.put(
 // ---- POS Sale ----
 const saleItemSchema = z.object({ variantId: z.string(), quantity: z.number().int().min(1) });
 const saleSchema = z.object({
-  locationId: z.string(),
   items: z.array(saleItemSchema).min(1),
   customerId: z.string().optional(),
   customerName: z.string().default("Walk-in Customer"),
@@ -190,6 +190,7 @@ posRouter.post(
   "/sale",
   asyncHandler(async (req, res) => {
     const data = saleSchema.parse(req.body);
+    const locationId = await getTheLocationId();
 
     const variants = await prisma.productVariant.findMany({
       where: { id: { in: data.items.map((i) => i.variantId) } },
@@ -240,7 +241,7 @@ posRouter.post(
           orderNumber,
           channel: "POS",
           userId: data.customerId,
-          locationId: data.locationId,
+          locationId,
           status: "COMPLETED",
           paymentStatus: "PAID",
           fulfillmentStatus: "FULFILLED",

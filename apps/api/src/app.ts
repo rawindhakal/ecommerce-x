@@ -33,6 +33,8 @@ import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
 import { reportsRouter } from "./modules/reports/reports.routes.js";
 import { redirectsRouter } from "./modules/seo/redirects.routes.js";
 import { seoAuditRouter } from "./modules/seo/audit.routes.js";
+import { backupRouter } from "./modules/backup/backup.routes.js";
+import { auditRouter } from "./modules/audit/audit.routes.js";
 
 export function createApp() {
   const app = express();
@@ -89,6 +91,8 @@ export function createApp() {
   app.use("/api/reports", reportsRouter);
   app.use("/api/redirects", redirectsRouter);
   app.use("/api/seo-audit", seoAuditRouter);
+  app.use("/api/backup", backupRouter);
+  app.use("/api/audit-log", auditRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

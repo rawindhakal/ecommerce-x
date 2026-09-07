@@ -4,6 +4,7 @@ import { prisma } from "@ecommerce-x/db";
 import { asyncHandler } from "../../middleware/async-handler.js";
 import { requireAuth, requireRole, ADMIN_ROLES } from "../../middleware/auth.js";
 import { getLoyaltyRule } from "./loyalty.service.js";
+import { logAudit } from "../../lib/audit-log.js";
 
 export const loyaltyRouter = Router();
 
@@ -74,6 +75,10 @@ loyaltyRouter.post(
       prisma.loyaltyTransaction.create({ data: { userId, type: "ADJUST", points, note: note ?? "Manual adjustment" } }),
       prisma.user.update({ where: { id: userId }, data: { loyaltyPoints: { increment: points } } }),
     ]);
+    // LoyaltyTransaction records the account and amount but not who made
+    // the call — worth a real audit entry since staff could otherwise
+    // credit points to their own or a friend's account undetected.
+    await logAudit({ userId: req.user!.id, action: "loyalty.manual_adjust", entityType: "User", entityId: userId, metadata: { points, note }, ipAddress: req.ip });
     res.json({ success: true });
   })
 );

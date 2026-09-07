@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { api } from "@/lib/api";
 import { formatNpr } from "@/lib/format";
 
@@ -17,7 +17,8 @@ interface UserDetail {
   orders: { id: string; orderNumber: string; total: string; status: string; createdAt: string }[];
 }
 
-export default function CustomerDetailPage({ params }: { params: { id: string } }) {
+export default function CustomerDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   const [user, setUser] = useState<UserDetail | null>(null);
   const [points, setPoints] = useState("");
   const [note, setNote] = useState("");

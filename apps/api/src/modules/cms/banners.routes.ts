@@ -10,11 +10,15 @@ bannersRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const placement = req.query.placement as string | undefined;
+    const categorySlug = req.query.categorySlug as string | undefined;
     const now = new Date();
     const banners = await prisma.banner.findMany({
       where: {
         placement: placement as any,
         isActive: true,
+        // CATEGORY_TOP banners with no categorySlug are the "show on every
+        // category page" default; one with a categorySlug only shows there.
+        ...(categorySlug ? { OR: [{ categorySlug: null }, { categorySlug }] } : {}),
         AND: [{ OR: [{ startsAt: null }, { startsAt: { lte: now } }] }, { OR: [{ endsAt: null }, { endsAt: { gte: now } }] }],
       },
       orderBy: { sortOrder: "asc" },
@@ -34,14 +38,19 @@ bannersRouter.get(
 
 const bannerSchema = z.object({
   title: z.string().min(1),
+  subtitle: z.string().nullish(),
+  ctaText: z.string().nullish(),
   imageUrl: z.string().min(1),
-  mobileImageUrl: z.string().optional(),
-  linkUrl: z.string().optional(),
+  mobileImageUrl: z.string().nullish(),
+  linkUrl: z.string().nullish(),
   placement: z.enum(["HOME_HERO", "HOME_PROMO", "CATEGORY_TOP", "POPUP"]),
+  categorySlug: z.string().nullish(),
+  textPosition: z.enum(["left", "center", "right"]).optional(),
+  theme: z.enum(["light", "dark"]).optional(),
   sortOrder: z.number().optional(),
   isActive: z.boolean().optional(),
-  startsAt: z.string().datetime().nullable().optional(),
-  endsAt: z.string().datetime().nullable().optional(),
+  startsAt: z.string().datetime().nullish(),
+  endsAt: z.string().datetime().nullish(),
 });
 
 bannersRouter.post(

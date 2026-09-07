@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { api } from "@/lib/api";
 import { formatNpr } from "@/lib/format";
 
@@ -28,7 +28,8 @@ interface OrderDetail {
 
 const STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "DELIVERED", "COMPLETED", "CANCELLED", "REFUNDED"];
 
-export default function OrderDetailPage({ params }: { params: { id: string } }) {
+export default function OrderDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [newStatus, setNewStatus] = useState("");
   const [note, setNote] = useState("");

@@ -4,7 +4,7 @@ import { prisma } from "@ecommerce-x/db";
 import { asyncHandler } from "../../middleware/async-handler.js";
 import { requireAuth, requireRole, STAFF_ROLES, ADMIN_ROLES, POS_ROLES } from "../../middleware/auth.js";
 import { getPagination, paginate } from "../../lib/pagination.js";
-import { applyStockMovement } from "./inventory.service.js";
+import { applyStockMovement, getTheLocationId } from "./inventory.service.js";
 
 export const inventoryRouter = Router();
 
@@ -14,9 +14,8 @@ inventoryRouter.get(
   requireRole(...STAFF_ROLES),
   asyncHandler(async (req, res) => {
     const { page, pageSize, skip, take } = getPagination(req);
-    const { locationId, lowStock, search } = req.query as Record<string, string | undefined>;
+    const { lowStock, search } = req.query as Record<string, string | undefined>;
     const where: any = {};
-    if (locationId) where.locationId = locationId;
     if (search) where.variant = { OR: [{ sku: { contains: search, mode: "insensitive" } }, { product: { name: { contains: search, mode: "insensitive" } } }] };
 
     const [rows, total] = await Promise.all([
@@ -37,7 +36,6 @@ inventoryRouter.get(
 
 const adjustSchema = z.object({
   variantId: z.string(),
-  locationId: z.string(),
   change: z.number().int(),
   reason: z.enum(["RESTOCK", "RETURN", "DAMAGE", "ADJUSTMENT", "TRANSFER_IN", "TRANSFER_OUT"]),
   note: z.string().optional(),
@@ -49,7 +47,8 @@ inventoryRouter.post(
   requireRole(...STAFF_ROLES),
   asyncHandler(async (req, res) => {
     const data = adjustSchema.parse(req.body);
-    const result = await applyStockMovement({ ...data, performedById: req.user!.id, allowNegative: true });
+    const locationId = await getTheLocationId();
+    const result = await applyStockMovement({ ...data, locationId, performedById: req.user!.id, allowNegative: true });
     res.json(result);
   })
 );
@@ -69,7 +68,8 @@ inventoryRouter.get(
   })
 );
 
-// ---- Locations ----
+// ---- Location ---- (single-location system: exactly one row always exists;
+// there is no create endpoint — adding a second location isn't supported)
 export const locationsRouter = Router();
 
 locationsRouter.get(
@@ -77,27 +77,16 @@ locationsRouter.get(
   requireAuth,
   requireRole(...POS_ROLES),
   asyncHandler(async (_req, res) => {
-    res.json(await prisma.location.findMany({ orderBy: { name: "asc" } }));
+    const location = await prisma.location.findFirst({ orderBy: { createdAt: "asc" } });
+    res.json(location);
   })
 );
 
 const locationSchema = z.object({
   name: z.string().min(1),
-  type: z.enum(["WAREHOUSE", "STORE"]),
-  address: z.string().optional(),
+  address: z.string().nullish(),
   isActive: z.boolean().optional(),
-  isDefault: z.boolean().optional(),
 });
-
-locationsRouter.post(
-  "/",
-  requireAuth,
-  requireRole(...ADMIN_ROLES),
-  asyncHandler(async (req, res) => {
-    const location = await prisma.location.create({ data: locationSchema.parse(req.body) });
-    res.status(201).json(location);
-  })
-);
 
 locationsRouter.put(
   "/:id",

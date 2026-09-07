@@ -52,6 +52,7 @@ export default function RegisterPage() {
           <div>
             <label className="label">Password</label>
             <input type="password" minLength={8} required className="input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <p className="mt-1 text-xs text-ink/40">At least 8 characters, with a letter and a number.</p>
           </div>
           {error && <p className="text-sm text-red-500">{error}</p>}
           <button type="submit" disabled={loading} className="btn-primary w-full">{loading ? "Creating…" : "Create Account"}</button>

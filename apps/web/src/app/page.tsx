@@ -2,16 +2,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { serverGet } from "@/lib/server-api";
 import { ProductCard, type ProductCardData } from "@/components/product-card";
-import { imgSrc, isSvg } from "@/lib/image";
+import { imgSrc } from "@/lib/image";
+import { HeroCarousel, type BannerData } from "@/components/banner-carousel";
+import { PromoGrid } from "@/components/promo-grid";
 import type { PaginatedResult } from "@ecommerce-x/shared";
-
-interface Banner {
-  id: string;
-  title: string;
-  imageUrl: string;
-  linkUrl: string | null;
-  placement: string;
-}
 
 interface Category {
   id: string;
@@ -22,24 +16,18 @@ interface Category {
 
 export default async function HomePage() {
   const [heroBanners, promoBanners, categories, featured, newArrivals] = await Promise.all([
-    serverGet<Banner[]>("/api/banners?placement=HOME_HERO", 60).then((b) => b ?? []),
-    serverGet<Banner[]>("/api/banners?placement=HOME_PROMO", 60).then((b) => b ?? []),
+    serverGet<BannerData[]>("/api/banners?placement=HOME_HERO", 60).then((b) => b ?? []),
+    serverGet<BannerData[]>("/api/banners?placement=HOME_PROMO", 60).then((b) => b ?? []),
     serverGet<Category[]>("/api/categories", 120).then((c) => c ?? []),
     serverGet<PaginatedResult<ProductCardData>>("/api/products?featured=true&pageSize=8", 60),
     serverGet<PaginatedResult<ProductCardData>>("/api/products?sort=newest&pageSize=8", 60),
   ]);
 
-  const hero = heroBanners[0];
-
   return (
     <div>
       <section className="relative">
-        {hero ? (
-          <Link href={hero.linkUrl ?? "/products"} className="block">
-            <div className="relative h-[60vh] min-h-[380px] w-full overflow-hidden bg-blush">
-              <Image src={imgSrc(hero.imageUrl)} alt={hero.title} fill priority sizes="100vw" unoptimized={isSvg(hero.imageUrl)} className="object-cover" />
-            </div>
-          </Link>
+        {heroBanners.length > 0 ? (
+          <HeroCarousel banners={heroBanners} />
         ) : (
           <div className="flex h-[55vh] min-h-[380px] w-full flex-col items-center justify-center bg-gradient-to-br from-blush to-cream text-center">
             <h1 className="font-display text-4xl font-semibold text-ink md:text-6xl">Beauty & Style, Delivered.</h1>
@@ -89,15 +77,7 @@ export default async function HomePage() {
         </section>
       )}
 
-      {promoBanners[0] && (
-        <section className="container-x py-6">
-          <Link href={promoBanners[0].linkUrl ?? "/products"} className="relative block overflow-hidden rounded-2xl">
-            <div className="relative h-48 w-full md:h-64">
-              <Image src={imgSrc(promoBanners[0].imageUrl)} alt={promoBanners[0].title} fill unoptimized className="object-cover" />
-            </div>
-          </Link>
-        </section>
-      )}
+      <PromoGrid banners={promoBanners} />
 
       {!!newArrivals?.items.length && (
         <section className="container-x py-10">

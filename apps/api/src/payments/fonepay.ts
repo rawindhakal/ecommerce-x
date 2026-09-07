@@ -110,6 +110,6 @@ export const fonepayGateway: PaymentGateway = {
       return { success: false, message: `Fonepay status: ${json.paymentStatus}`, raw: json };
     }
 
-    return { success: true, transactionId: json.fonepayTraceId, amount: json.amount ? Number(json.amount) : undefined, raw: json };
+    return { success: true, transactionId: json.fonepayTraceId, referenceId, amount: json.amount ? Number(json.amount) : undefined, raw: json };
   },
 };

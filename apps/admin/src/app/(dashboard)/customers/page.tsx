@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Search, Plus } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAuthStore } from "@/lib/auth-store";
 import type { PaginatedResult } from "@ecommerce-x/shared";
 
 interface UserRow {
@@ -19,6 +20,7 @@ interface UserRow {
 }
 
 export default function CustomersPage() {
+  const { user: currentUser } = useAuthStore();
   const [result, setResult] = useState<PaginatedResult<UserRow> | null>(null);
   const [role, setRole] = useState("");
   const [search, setSearch] = useState("");
@@ -55,12 +57,15 @@ export default function CustomersPage() {
           <input placeholder="Last name" className="input" value={staffForm.lastName} onChange={(e) => setStaffForm({ ...staffForm, lastName: e.target.value })} />
           <input required type="tel" placeholder="Phone Number" className="input" value={staffForm.phone} onChange={(e) => setStaffForm({ ...staffForm, phone: e.target.value })} />
           <input type="email" placeholder="Email (optional)" className="input" value={staffForm.email} onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} />
-          <input required type="password" placeholder="Password" className="input" value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} />
+          <div>
+            <input required type="password" placeholder="Password" className="input" value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} />
+            <p className="mt-1 text-xs text-slate-400">At least 8 characters, with a letter and a number.</p>
+          </div>
           <select className="input" value={staffForm.role} onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}>
             <option value="STAFF">Staff</option>
             <option value="POS_CASHIER">POS Cashier</option>
             <option value="ADMIN">Admin</option>
-            <option value="SUPERADMIN">Super Admin</option>
+            {currentUser?.role === "SUPERADMIN" && <option value="SUPERADMIN">Super Admin</option>}
           </select>
           <button type="submit" className="btn-primary sm:col-span-2">Create Account</button>
         </form>

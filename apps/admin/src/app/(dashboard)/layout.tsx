@@ -21,6 +21,9 @@ import {
   LogOut,
   BarChart3,
   X,
+  Search,
+  ScrollText,
+  DatabaseBackup,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
@@ -40,8 +43,12 @@ const FULL_NAV = [
   { href: "/cms/pages", label: "Pages", icon: FileText },
   { href: "/cms/banners", label: "Banners", icon: ImageIcon },
   { href: "/cms/menus", label: "Menus", icon: MenuIcon },
+  { href: "/seo", label: "SEO", icon: Search },
+  { href: "/audit-log", label: "Audit Log", icon: ScrollText },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
+
+const SUPERADMIN_ONLY_NAV = [{ href: "/backup", label: "Backup & Restore", icon: DatabaseBackup }];
 
 const CASHIER_NAV = [{ href: "/pos", label: "POS", icon: Store }];
 
@@ -74,7 +81,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return <div className="flex min-h-screen items-center justify-center text-slate-400">Loading…</div>;
   }
 
-  const nav = user.role === "POS_CASHIER" ? CASHIER_NAV : FULL_NAV;
+  const nav = user.role === "POS_CASHIER" ? CASHIER_NAV : user.role === "SUPERADMIN" ? [...FULL_NAV, ...SUPERADMIN_ONLY_NAV] : FULL_NAV;
   const currentLabel = nav.find((item) => item.href === pathname || (item.href !== "/" && pathname.startsWith(item.href)))?.label ?? "";
 
   const sidebarContent = (

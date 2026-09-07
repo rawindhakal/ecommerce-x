@@ -154,7 +154,7 @@ export function ProductForm({ initial }: { initial?: any }) {
         productId = created.id;
       }
 
-      // Sync stock for each variant at the default warehouse via inventory adjust
+      // Sync stock for each variant via inventory adjust
       const productData = await api.get<any>(`/api/products/${form.slug}`);
       for (const v of form.variants) {
         const match = productData.variants.find((pv: any) => pv.sku === v.sku);
@@ -163,11 +163,7 @@ export function ProductForm({ initial }: { initial?: any }) {
         const target = Number(v.stock || 0);
         const diff = target - currentStock;
         if (diff !== 0) {
-          const locations = await api.get<any[]>("/api/locations");
-          const warehouse = locations.find((l) => l.isDefault) ?? locations[0];
-          if (warehouse) {
-            await api.post("/api/inventory/adjust", { variantId: match.id, locationId: warehouse.id, change: diff, reason: "ADJUSTMENT", note: "Set from product form" });
-          }
+          await api.post("/api/inventory/adjust", { variantId: match.id, change: diff, reason: "ADJUSTMENT", note: "Set from product form" });
         }
       }
 

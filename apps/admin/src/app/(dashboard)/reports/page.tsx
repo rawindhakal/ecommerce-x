@@ -274,12 +274,12 @@ function InventoryTab() {
       <div className="card overflow-x-auto p-5">
         <h2 className="mb-4 text-sm font-semibold">Low Stock</h2>
         <table className="table-base">
-          <thead><tr><th>Product</th><th>SKU</th><th>Location</th><th>On Hand</th><th>Reorder Point</th></tr></thead>
+          <thead><tr><th>Product</th><th>SKU</th><th>On Hand</th><th>Reorder Point</th></tr></thead>
           <tbody>
             {data?.lowStock.map((r: any, i: number) => (
-              <tr key={i}><td>{r.product}</td><td className="text-slate-500">{r.sku}</td><td>{r.location}</td><td className="font-medium text-red-500">{r.quantityOnHand}</td><td>{r.reorderPoint}</td></tr>
+              <tr key={i}><td>{r.product}</td><td className="text-slate-500">{r.sku}</td><td className="font-medium text-red-500">{r.quantityOnHand}</td><td>{r.reorderPoint}</td></tr>
             ))}
-            {data?.lowStock.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-slate-400">Nothing low on stock</td></tr>}
+            {data?.lowStock.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-slate-400">Nothing low on stock</td></tr>}
           </tbody>
         </table>
       </div>
@@ -297,12 +297,11 @@ function PosSessionsTab({ range }: { range: DateRange }) {
     <div className="card overflow-x-auto p-5">
       <h2 className="mb-4 text-sm font-semibold">POS Sessions</h2>
       <table className="table-base">
-        <thead><tr><th>Cashier</th><th>Location</th><th>Opened</th><th>Closed</th><th>Opening</th><th>Expected</th><th>Counted</th><th>Variance</th></tr></thead>
+        <thead><tr><th>Cashier</th><th>Opened</th><th>Closed</th><th>Opening</th><th>Expected</th><th>Counted</th><th>Variance</th></tr></thead>
         <tbody>
           {sessions.map((s) => (
             <tr key={s.id}>
               <td>{s.cashier}</td>
-              <td>{s.location}</td>
               <td className="text-slate-500">{new Date(s.openedAt).toLocaleString()}</td>
               <td className="text-slate-500">{s.closedAt ? new Date(s.closedAt).toLocaleString() : "Open"}</td>
               <td>{formatNpr(s.openingBalance)}</td>

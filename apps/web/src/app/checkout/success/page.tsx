@@ -13,7 +13,8 @@ interface OrderDetail {
   items: { name: string; quantity: number; total: string }[];
 }
 
-export default async function CheckoutSuccessPage({ searchParams }: { searchParams: { orderId?: string } }) {
+export default async function CheckoutSuccessPage(props: { searchParams: Promise<{ orderId?: string }> }) {
+  const searchParams = await props.searchParams;
   const order = searchParams.orderId ? await serverGet<OrderDetail>(`/api/orders/${searchParams.orderId}`, 0) : null;
 
   return (

@@ -41,9 +41,16 @@ async function main() {
   ];
 
   for (const s of settings) {
+    // `isSecret` must be kept in sync on update too: if an admin previously
+    // saved this key through the encrypted Settings UI (isSecret=true, value
+    // stored as an encrypted string) and the seed is later re-run, updating
+    // only `value` back to a plain seed object while leaving isSecret=true
+    // stuck corrupts the row — decryptJson then throws on every read since
+    // the value is no longer an encrypted string, taking down the whole
+    // settings endpoint. Always writing both fields keeps re-seeding safe.
     await prisma.setting.upsert({
       where: { group_key: { group: s.group, key: s.key } },
-      update: { value: s.value },
+      update: { value: s.value, isSecret: s.isSecret ?? false },
       create: { group: s.group, key: s.key, value: s.value, isSecret: s.isSecret ?? false },
     });
   }
@@ -69,16 +76,12 @@ async function main() {
     create: { id: "default-vat", name: "VAT", rate: 13, isDefault: true },
   });
 
-  // ---- Locations ----
-  const warehouse = await prisma.location.upsert({
-    where: { id: "main-warehouse" },
-    update: {},
-    create: { id: "main-warehouse", name: "Main Warehouse", type: LocationType.WAREHOUSE, isDefault: true },
-  });
+  // ---- Location ---- (single-location system: one place is both the sales
+  // floor and the stockroom, so there's nothing to pick between in POS/inventory)
   const store = await prisma.location.upsert({
     where: { id: "flagship-store" },
     update: {},
-    create: { id: "flagship-store", name: "Flagship Store - Durbar Marg", type: LocationType.STORE, address: "Durbar Marg, Kathmandu" },
+    create: { id: "flagship-store", name: "Flagship Store - Durbar Marg", type: LocationType.STORE, address: "Durbar Marg, Kathmandu", isDefault: true },
   });
 
   // ---- Users ---- (phone is the primary login identifier app-wide; email is
@@ -279,14 +282,9 @@ async function main() {
       });
 
       await prisma.inventory.upsert({
-        where: { variantId_locationId: { variantId: variant.id, locationId: warehouse.id } },
-        update: { quantityOnHand: v.stock },
-        create: { variantId: variant.id, locationId: warehouse.id, quantityOnHand: v.stock, reorderPoint: 5, reorderQty: 20 },
-      });
-      await prisma.inventory.upsert({
         where: { variantId_locationId: { variantId: variant.id, locationId: store.id } },
-        update: {},
-        create: { variantId: variant.id, locationId: store.id, quantityOnHand: Math.floor(v.stock / 4), reorderPoint: 2, reorderQty: 10 },
+        update: { quantityOnHand: v.stock },
+        create: { variantId: variant.id, locationId: store.id, quantityOnHand: v.stock, reorderPoint: 5, reorderQty: 20 },
       });
     }
   }

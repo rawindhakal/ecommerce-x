@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS, type PublicSettings } from "@/lib/settings";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { CartDrawer } from "@/components/cart-drawer";
+import { PopupBanner } from "@/components/popup-banner";
 import { Analytics, GtmNoScript } from "@/components/analytics";
 import { hexToRgbChannels } from "@/lib/color";
 
@@ -103,6 +104,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <main className="min-h-[60vh]">{children}</main>
         <Footer settings={settings} />
         <CartDrawer />
+        <PopupBanner />
       </body>
     </html>
   );

@@ -10,6 +10,7 @@
 import { createHmac } from "node:crypto";
 import { env } from "../config/env.js";
 import { getSettingsGroup } from "../modules/settings/settings.service.js";
+import { timingSafeEqualString } from "../lib/timing-safe-equal.js";
 import type { PaymentGateway } from "./types.js";
 
 const ENDPOINTS = {
@@ -90,7 +91,7 @@ export const esewaGateway: PaymentGateway = {
       `transaction_code=${decoded.transaction_code},status=${decoded.status},total_amount=${decoded.total_amount},transaction_uuid=${decoded.transaction_uuid},product_code=${cfg.merchantCode},signed_field_names=${decoded.signed_field_names}`,
       cfg.secretKey
     );
-    if (expectedSignature !== decoded.signature) {
+    if (!decoded.signature || !timingSafeEqualString(expectedSignature, decoded.signature)) {
       return { success: false, message: "Signature mismatch", raw: decoded };
     }
     if (decoded.status !== "COMPLETE") {
@@ -115,6 +116,7 @@ export const esewaGateway: PaymentGateway = {
     return {
       success: true,
       transactionId: decoded.transaction_code,
+      referenceId: decoded.transaction_uuid,
       amount: Number(decoded.total_amount),
       raw: decoded,
     };

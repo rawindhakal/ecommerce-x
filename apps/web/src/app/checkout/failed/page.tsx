@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { XCircle } from "lucide-react";
 
-export default function CheckoutFailedPage({ searchParams }: { searchParams: { orderId?: string; reason?: string } }) {
+export default async function CheckoutFailedPage(props: { searchParams: Promise<{ orderId?: string; reason?: string }> }) {
+  const searchParams = await props.searchParams;
   return (
     <div className="container-x flex flex-col items-center py-20 text-center">
       <XCircle size={56} className="text-red-500" />

@@ -12,6 +12,7 @@ import { createHmac } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import { env } from "../config/env.js";
 import { getSettingsGroup } from "../modules/settings/settings.service.js";
+import { timingSafeEqualString } from "../lib/timing-safe-equal.js";
 import type { PaymentGateway } from "./types.js";
 
 const ENDPOINTS = {
@@ -84,7 +85,7 @@ export const cybersourceGateway: PaymentGateway = {
     const message = signedFieldNames.map((name) => `${name}=${payload[name] ?? ""}`).join(",");
     const expected = createHmac("sha256", cfg.secretKey).update(message).digest("base64");
 
-    if (expected !== payload.signature) {
+    if (typeof payload.signature !== "string" || !timingSafeEqualString(expected, payload.signature)) {
       return { success: false, message: "Signature mismatch", raw: payload };
     }
 
@@ -96,6 +97,7 @@ export const cybersourceGateway: PaymentGateway = {
     return {
       success: true,
       transactionId: (payload.transaction_id as string) ?? (payload.req_transaction_uuid as string),
+      referenceId: payload.req_transaction_uuid as string | undefined,
       amount: payload.req_amount ? Number(payload.req_amount) : undefined,
       raw: payload,
     };

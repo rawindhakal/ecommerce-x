@@ -14,7 +14,8 @@ interface Brand {
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
-export async function generateMetadata({ searchParams }: { searchParams: Record<string, string | undefined> }): Promise<Metadata> {
+export async function generateMetadata(props: { searchParams: Promise<Record<string, string | undefined>> }): Promise<Metadata> {
+  const searchParams = await props.searchParams;
   const { category, brand, search, minPrice, maxPrice, page } = searchParams;
   const pageNum = Number(page ?? "1");
 
@@ -43,7 +44,8 @@ export async function generateMetadata({ searchParams }: { searchParams: Record<
   return { title: "Shop All", alternates: { canonical: `${SITE_URL}/products${qs ? `?${qs}` : ""}` } };
 }
 
-export default async function ProductsPage({ searchParams }: { searchParams: Record<string, string | undefined> }) {
+export default async function ProductsPage(props: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const searchParams = await props.searchParams;
   const qs = new URLSearchParams();
   for (const key of ["category", "brand", "search", "featured", "sort", "minPrice", "maxPrice", "tag"]) {
     if (searchParams[key]) qs.set(key, searchParams[key]!);

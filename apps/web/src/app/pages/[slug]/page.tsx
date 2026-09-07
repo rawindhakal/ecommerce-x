@@ -9,13 +9,15 @@ interface CmsPage {
   seoDescription: string | null;
 }
 
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const params = await props.params;
   const page = await serverGet<CmsPage>(`/api/pages/${params.slug}`, 300);
   if (!page) return {};
   return { title: page.seoTitle ?? page.title, description: page.seoDescription ?? undefined };
 }
 
-export default async function CmsPage({ params }: { params: { slug: string } }) {
+export default async function CmsPage(props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const page = await serverGet<CmsPage>(`/api/pages/${params.slug}`, 60);
   if (!page) notFound();
 

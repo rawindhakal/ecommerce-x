@@ -16,6 +16,22 @@ async function findPaymentForOrder(orderId: string) {
   return payment;
 }
 
+// A validly-signed callback proves the gateway processed *some* payment —
+// not that it's the one for THIS orderId, which comes straight from an
+// attacker-controlled query param. Without re-checking the gateway's own
+// echoed transaction reference (and amount) against the pending payment we
+// looked up, a real signed callback from a legitimate small purchase could
+// be replayed with a different orderId to mark an unrelated, more expensive
+// order as paid. Every callback must pass through this before finalizing.
+function assertResultMatchesPayment(result: { referenceId?: string; amount?: number }, payment: { referenceId: string; amount: unknown }) {
+  if (!result.referenceId || result.referenceId !== payment.referenceId) {
+    throw HttpError.badRequest("Payment reference mismatch — this callback does not belong to the pending payment for this order");
+  }
+  if (result.amount !== undefined && Math.abs(result.amount - Number(payment.amount)) > 0.01) {
+    throw HttpError.badRequest("Payment amount mismatch — this callback does not belong to the pending payment for this order");
+  }
+}
+
 // ---- eSewa: browser GET redirect with base64 `data` param ----
 paymentsRouter.get(
   "/callback/esewa",
@@ -25,6 +41,7 @@ paymentsRouter.get(
     const result = await getGateway("ESEWA").verify(req.query as Record<string, unknown>);
 
     if (result.success) {
+      assertResultMatchesPayment(result, payment);
       await finalizeSuccessfulPayment(payment.id, result);
       return res.redirect(`${env.webUrl}/checkout/success?orderId=${orderId}`);
     }
@@ -43,6 +60,7 @@ paymentsRouter.post(
     const result = await getGateway("CYBERSOURCE_NICASIA").verify(req.body as Record<string, unknown>);
 
     if (result.success) {
+      assertResultMatchesPayment(result, payment);
       await finalizeSuccessfulPayment(payment.id, result);
       return res.redirect(`${env.webUrl}/checkout/success?orderId=${orderId}`);
     }

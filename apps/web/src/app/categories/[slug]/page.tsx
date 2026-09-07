@@ -4,6 +4,8 @@ import { serverGet } from "@/lib/server-api";
 import { ProductCard, type ProductCardData } from "@/components/product-card";
 import { SortSelect, Pagination } from "@/components/product-filters";
 import { JsonLd, breadcrumbJsonLd } from "@/components/json-ld";
+import { CategoryTopBanner } from "@/components/category-top-banner";
+import type { BannerData } from "@/components/banner-carousel";
 import type { PaginatedResult } from "@ecommerce-x/shared";
 
 interface Category {
@@ -18,13 +20,14 @@ interface Category {
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
-export async function generateMetadata({
-  params,
-  searchParams,
-}: {
-  params: { slug: string };
-  searchParams: Record<string, string | undefined>;
-}): Promise<Metadata> {
+export async function generateMetadata(
+  props: {
+    params: Promise<{ slug: string }>;
+    searchParams: Promise<Record<string, string | undefined>>;
+  }
+): Promise<Metadata> {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const category = await serverGet<Category>(`/api/categories/${params.slug}`, 300);
   if (!category) return {};
 
@@ -43,20 +46,24 @@ export async function generateMetadata({
   };
 }
 
-export default async function CategoryPage({
-  params,
-  searchParams,
-}: {
-  params: { slug: string };
-  searchParams: Record<string, string | undefined>;
-}) {
+export default async function CategoryPage(
+  props: {
+    params: Promise<{ slug: string }>;
+    searchParams: Promise<Record<string, string | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const category = await serverGet<Category>(`/api/categories/${params.slug}`, 60);
   if (!category) notFound();
 
   const qs = new URLSearchParams({ category: params.slug, page: searchParams.page ?? "1", pageSize: "12" });
   if (searchParams.sort) qs.set("sort", searchParams.sort);
 
-  const result = await serverGet<PaginatedResult<ProductCardData>>(`/api/products?${qs.toString()}`, 30);
+  const [result, topBanners] = await Promise.all([
+    serverGet<PaginatedResult<ProductCardData>>(`/api/products?${qs.toString()}`, 30),
+    serverGet<BannerData[]>(`/api/banners?placement=CATEGORY_TOP&categorySlug=${category.slug}`, 60).then((b) => b ?? []),
+  ]);
 
   return (
     <div className="container-x py-10">
@@ -66,6 +73,8 @@ export default async function CategoryPage({
           { name: category.name, url: `${SITE_URL}/categories/${category.slug}` },
         ])}
       />
+      {topBanners[0] && <CategoryTopBanner banner={topBanners[0]} />}
+
       <div className="mb-8 flex items-end justify-between">
         <div>
           <h1 className="font-display text-3xl">{category.name}</h1>

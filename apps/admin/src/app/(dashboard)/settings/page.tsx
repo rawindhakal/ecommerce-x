@@ -211,6 +211,19 @@ function IntegrationsTab({ settings, onSave }: { settings: any; onSave: (g: stri
         <label className="label">Google Tag Manager Container ID</label>
         <input className="input" placeholder="GTM-XXXXXXX" value={form.gtmContainerId ?? ""} onChange={(e) => setForm({ ...form, gtmContainerId: e.target.value })} />
       </div>
+      <div>
+        <label className="label">GA4 Measurement ID</label>
+        <input className="input" placeholder="G-XXXXXXXXXX" value={form.ga4MeasurementId ?? ""} onChange={(e) => setForm({ ...form, ga4MeasurementId: e.target.value })} />
+        <p className="mt-1 text-xs text-ink/40">Direct GA4 tag, separate from GTM — set this only if you're not already sending GA4 events through the GTM container above.</p>
+      </div>
+      <div>
+        <label className="label">Google Search Console Verification</label>
+        <input className="input" placeholder="Meta tag content value" value={form.googleSiteVerification ?? ""} onChange={(e) => setForm({ ...form, googleSiteVerification: e.target.value })} />
+      </div>
+      <div>
+        <label className="label">Bing Webmaster Verification</label>
+        <input className="input" placeholder="Meta tag content value" value={form.bingSiteVerification ?? ""} onChange={(e) => setForm({ ...form, bingSiteVerification: e.target.value })} />
+      </div>
       <button className="btn-primary w-fit sm:col-span-2" onClick={() => onSave("integrations", form)}>Save Integrations</button>
     </div>
   );

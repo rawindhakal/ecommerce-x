@@ -19,8 +19,10 @@ A full-stack e-commerce platform for a Fashion & Cosmetics store: Next.js storef
 
 ```bash
 pnpm install
-cp .env.example .env            # then edit values as needed
-cp .env apps/api/.env           # API loads its own .env from its cwd
+cp .env.example .env                    # then edit values as needed
+cp .env apps/api/.env                   # API loads its own .env from its cwd
+cp .env.example apps/web/.env.local     # Next only inlines NEXT_PUBLIC_* vars from an app's own .env*
+cp .env.example apps/admin/.env.local   # (the repo-root .env is not read by Next directly)
 
 createdb ecommerce_x_dev        # or update DATABASE_URL to an existing db
 
@@ -28,13 +30,13 @@ pnpm --filter @ecommerce-x/db migrate   # applies Prisma migrations
 pnpm --filter @ecommerce-x/db seed      # seeds demo catalog, settings, users
 ```
 
-Seeded logins:
+Login is phone-primary (email is optional and still accepted as a fallback identifier). Seeded logins:
 
-| Role | Email | Password |
-|---|---|---|
-| Super Admin | `admin@belabeauty.example` | `Admin@12345` |
-| POS Cashier | `cashier@belabeauty.example` | `Cashier@12345` |
-| Customer | `customer@example.com` | `Customer@12345` |
+| Role | Phone | Password | Email (fallback) |
+|---|---|---|---|
+| Super Admin | `9801000001` | `Admin@12345` | `admin@belabeauty.example` |
+| POS Cashier | `9801000002` | `Cashier@12345` | `cashier@belabeauty.example` |
+| Customer | `9801000003` | `Customer@12345` | `customer@example.com` |
 
 ## Running
 
@@ -46,7 +48,7 @@ pnpm dev:web     # http://localhost:3002  (storefront)
 pnpm dev:admin   # http://localhost:3001  (admin panel + POS)
 ```
 
-Or `pnpm dev` to run all three via pnpm's parallel workspace runner. If your machine's ports differ, update `PORT`/`API_URL`/`WEB_URL`/`ADMIN_URL`/`NEXT_PUBLIC_API_URL` in `.env` (and `apps/api/.env`) together — the API's CORS and payment-gateway redirect URLs are derived from these.
+Or `pnpm dev` to run all three via pnpm's parallel workspace runner. If your machine's ports differ, update `PORT`/`API_URL`/`WEB_URL`/`ADMIN_URL` in `.env` and `apps/api/.env`, and `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_SITE_URL` in `apps/web/.env.local` and `apps/admin/.env.local`, together — the API's CORS and payment-gateway redirect URLs are derived from these, and product/logo image URLs and canonical SEO tags will silently break if `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_SITE_URL` aren't set in the frontend apps' own env files.
 
 ## What's controlled from the Admin Panel (Settings)
 
@@ -82,3 +84,5 @@ packages/
 - Object storage (S3/Cloudinary) instead of local disk for `/uploads` in multi-instance deployments
 - A transactional email/SMS provider (order confirmations aren't wired to a provider yet — hook into `Order`/`Payment` events)
 - Strong, unique `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, and `SETTINGS_ENCRYPTION_KEY` values
+- PostgreSQL client tools (`pg_dump`/`pg_restore`, matching the server's major version) installed on the API host — required for Admin → Backup & Restore. Not needed for normal operation, only for that feature.
+- A periodic *off-server* copy of backups: Admin → Backup & Restore is an on-demand manual backup, not a scheduled/offsite one — for real disaster recovery (the server itself being lost), also run `pg_dump`/`pg_restore` from a scheduled job that ships the file somewhere else (S3, another host, etc.)

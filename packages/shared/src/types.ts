@@ -31,6 +31,12 @@ export interface PaymentInitiateResult {
 export interface PaymentVerifyResult {
   success: boolean;
   transactionId?: string;
+  // The gateway's own echo of the transaction reference we originally sent
+  // it (e.g. eSewa's transaction_uuid, CyberSource's req_transaction_uuid).
+  // A signature can be genuinely valid yet describe a *different* payment
+  // than the one the caller is trying to finalize — the caller must check
+  // this equals the expected payment's referenceId before trusting `success`.
+  referenceId?: string;
   amount?: number;
   raw?: unknown;
   message?: string;

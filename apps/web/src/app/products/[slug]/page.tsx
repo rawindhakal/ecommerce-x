@@ -46,7 +46,8 @@ interface FullProduct {
   }[];
 }
 
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const params = await props.params;
   const product = await serverGet<FullProduct>(`/api/products/${params.slug}`, 120);
   if (!product || product.status !== "ACTIVE") return {};
   const canonical = `${SITE_URL}/products/${product.slug}`;
@@ -60,7 +61,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
-export default async function ProductPage({ params }: { params: { slug: string } }) {
+export default async function ProductPage(props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const product = await serverGet<FullProduct>(`/api/products/${params.slug}`, 60);
   // A DRAFT/ARCHIVED product still exists in the DB (unlike a deleted one,
   // which gets a 410 via the Redirect middleware) but must not be indexable

@@ -73,6 +73,18 @@ async function runStockMovement(
   return updated;
 }
 
+/**
+ * This is a single-location system — there is exactly one Location row,
+ * used only as the FK anchor for Inventory/StockMovement/Order/PosSession.
+ * Callers resolve it here instead of asking the client (POS terminal,
+ * inventory adjustment form, etc.) to pick one.
+ */
+export async function getTheLocationId(): Promise<string> {
+  const location = await prisma.location.findFirst({ orderBy: { createdAt: "asc" } });
+  if (!location) throw HttpError.badRequest("No store location is configured");
+  return location.id;
+}
+
 export async function getAvailableStock(variantId: string, locationId?: string): Promise<number> {
   const rows = await prisma.inventory.findMany({ where: { variantId, locationId } });
   return rows.reduce((sum, r) => sum + (r.quantityOnHand - r.quantityReserved), 0);
