@@ -24,6 +24,7 @@ import {
   Search,
   ScrollText,
   DatabaseBackup,
+  UserCircle,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
@@ -115,6 +116,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </nav>
       <div className="border-t border-slate-100 p-3">
         <p className="truncate px-3 text-xs text-slate-400">{user.phone ?? user.email}</p>
+        <Link
+          href="/account"
+          className={`flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium ${
+            pathname === "/account" ? "bg-brand-50 text-brand-600" : "text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          <UserCircle size={17} /> My Account
+        </Link>
         <button
           onClick={() => logout().then(() => router.push("/login"))}
           className="mt-1 flex min-h-[44px] w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-slate-500 hover:bg-slate-50"

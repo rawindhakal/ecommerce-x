@@ -77,6 +77,7 @@ const updateUserSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   phone: z.string().regex(PHONE_REGEX, PHONE_VALIDATION_MESSAGE).optional(),
+  email: z.string().email().optional().or(z.literal("")),
   role: z.enum(["SUPERADMIN", "ADMIN", "STAFF", "POS_CASHIER", "CUSTOMER"]).optional(),
   isActive: z.boolean().optional(),
 });
@@ -84,7 +85,8 @@ const updateUserSchema = z.object({
 usersRouter.put(
   "/:id",
   asyncHandler(async (req, res) => {
-    const data = updateUserSchema.parse(req.body);
+    const { email, ...data } = updateUserSchema.parse(req.body);
+    const targetId = req.params.id as string;
 
     // Same escalation risk as staff creation, plus: a plain ADMIN must not
     // be able to change a Super Admin's role/status at all (e.g. demoting
@@ -92,12 +94,25 @@ usersRouter.put(
     // themselves) — only another Super Admin may touch a Super Admin account.
     if (req.user!.role !== "SUPERADMIN") {
       if (data.role === "SUPERADMIN") throw HttpError.forbidden("Only a Super Admin can grant the Super Admin role");
-      const target = await prisma.user.findUnique({ where: { id: req.params.id as string }, select: { role: true } });
+      const target = await prisma.user.findUnique({ where: { id: targetId }, select: { role: true } });
       if (target?.role === "SUPERADMIN") throw HttpError.forbidden("Only a Super Admin can modify a Super Admin account");
     }
 
-    const before = await prisma.user.findUnique({ where: { id: req.params.id as string }, select: { role: true, isActive: true } });
-    const user = await prisma.user.update({ where: { id: req.params.id as string }, data, select });
+    if (data.phone) {
+      const existing = await prisma.user.findUnique({ where: { phone: data.phone } });
+      if (existing && existing.id !== targetId) throw HttpError.conflict("That phone number is already in use by another account");
+    }
+    if (email) {
+      const existing = await prisma.user.findUnique({ where: { email } });
+      if (existing && existing.id !== targetId) throw HttpError.conflict("That email is already in use by another account");
+    }
+
+    const before = await prisma.user.findUnique({ where: { id: targetId }, select: { role: true, isActive: true } });
+    const user = await prisma.user.update({
+      where: { id: targetId },
+      data: { ...data, email: email === undefined ? undefined : email || null },
+      select,
+    });
 
     if (data.role && data.role !== before?.role) {
       await logAudit({ userId: req.user!.id, action: "user.role_changed", entityType: "User", entityId: user.id, metadata: { from: before?.role, to: data.role }, ipAddress: req.ip });
@@ -107,5 +122,31 @@ usersRouter.put(
     }
 
     res.json(user);
+  })
+);
+
+// Admin-initiated password reset: no current-password check (that's the
+// point — this is for when a customer/staff member is locked out), but the
+// same Super-Admin-account protection as above still applies.
+const resetPasswordSchema = z.object({ password: passwordSchema });
+
+usersRouter.post(
+  "/:id/password",
+  asyncHandler(async (req, res) => {
+    const { password } = resetPasswordSchema.parse(req.body);
+    const targetId = req.params.id as string;
+
+    if (req.user!.role !== "SUPERADMIN") {
+      const target = await prisma.user.findUnique({ where: { id: targetId }, select: { role: true } });
+      if (target?.role === "SUPERADMIN") throw HttpError.forbidden("Only a Super Admin can reset a Super Admin's password");
+    }
+
+    await prisma.user.update({ where: { id: targetId }, data: { passwordHash: await hashPassword(password) } });
+    // A password reset by someone else should end every existing session on
+    // that account, the same as a self-service change does.
+    await prisma.refreshToken.updateMany({ where: { userId: targetId, revokedAt: null }, data: { revokedAt: new Date() } });
+    await logAudit({ userId: req.user!.id, action: "user.password_reset_by_admin", entityType: "User", entityId: targetId, ipAddress: req.ip });
+
+    res.json({ success: true });
   })
 );

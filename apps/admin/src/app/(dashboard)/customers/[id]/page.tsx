@@ -36,9 +36,15 @@ export default function CustomerDetailPage(props: { params: Promise<{ id: string
   const [credit, setCredit] = useState<CreditAccount | null>(null);
   const [newLimit, setNewLimit] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [contactForm, setContactForm] = useState({ firstName: "", lastName: "", phone: "", email: "" });
+  const [savingContact, setSavingContact] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   async function load() {
-    setUser(await api.get<UserDetail>(`/api/users/${params.id}`));
+    const data = await api.get<UserDetail>(`/api/users/${params.id}`);
+    setUser(data);
+    setContactForm({ firstName: data.firstName ?? "", lastName: data.lastName ?? "", phone: data.phone ?? "", email: data.email ?? "" });
   }
   async function loadCredit() {
     try {
@@ -87,6 +93,39 @@ export default function CustomerDetailPage(props: { params: Promise<{ id: string
     load();
   }
 
+  async function saveContact(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingContact(true);
+    try {
+      await api.put(`/api/users/${params.id}`, {
+        firstName: contactForm.firstName,
+        lastName: contactForm.lastName || undefined,
+        phone: contactForm.phone,
+        email: contactForm.email,
+      });
+      toast.success("Contact info updated");
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to update contact info");
+    } finally {
+      setSavingContact(false);
+    }
+  }
+
+  async function resetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setResettingPassword(true);
+    try {
+      await api.post(`/api/users/${params.id}/password`, { password: newPassword });
+      setNewPassword("");
+      toast.success("Password reset. This account has been signed out of all devices.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to reset password");
+    } finally {
+      setResettingPassword(false);
+    }
+  }
+
   if (!user) return <p className="text-slate-400">Loading…</p>;
 
   return (
@@ -99,9 +138,16 @@ export default function CustomerDetailPage(props: { params: Promise<{ id: string
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="card p-5">
           <h2 className="mb-2 text-sm font-semibold">Contact</h2>
-          <p className="text-sm font-medium text-slate-800">{user.phone}</p>
-          {user.email && <p className="text-sm text-slate-600">{user.email}</p>}
-          <p className="mt-2 text-xs text-slate-400">Role: {user.role}</p>
+          <form onSubmit={saveContact} className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div><label className="label">First Name</label><input required className="input" value={contactForm.firstName} onChange={(e) => setContactForm({ ...contactForm, firstName: e.target.value })} /></div>
+              <div><label className="label">Last Name</label><input className="input" value={contactForm.lastName} onChange={(e) => setContactForm({ ...contactForm, lastName: e.target.value })} /></div>
+            </div>
+            <div><label className="label">Phone</label><input required className="input" value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })} /></div>
+            <div><label className="label">Email</label><input type="email" className="input" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} /></div>
+            <p className="text-xs text-slate-400">Role: {user.role}</p>
+            <button type="submit" disabled={savingContact} className="btn-primary w-full">{savingContact ? "Saving…" : "Save Contact Info"}</button>
+          </form>
         </div>
 
         <div className="card p-5">
@@ -110,6 +156,13 @@ export default function CustomerDetailPage(props: { params: Promise<{ id: string
             <input type="number" required placeholder="GlowPoints (+/-)" className="input" value={points} onChange={(e) => setPoints(e.target.value)} />
             <input placeholder="Note" className="input" value={note} onChange={(e) => setNote(e.target.value)} />
             <button type="submit" className="btn-primary w-full">Adjust GlowPoints</button>
+          </form>
+
+          <h2 className="mb-2 mt-5 text-sm font-semibold">Reset Password</h2>
+          <form onSubmit={resetPassword} className="space-y-2">
+            <input type="password" required minLength={8} placeholder="New password" className="input" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+            <p className="text-xs text-slate-400">At least 8 characters, with a letter and a number. This signs the account out everywhere.</p>
+            <button type="submit" disabled={resettingPassword} className="btn-danger w-full">{resettingPassword ? "Resetting…" : "Reset Password"}</button>
           </form>
         </div>
 

@@ -227,6 +227,59 @@ authRouter.get(
   })
 );
 
+const updateProfileSchema = z.object({
+  firstName: z.string().min(1).optional(),
+  lastName: z.string().min(1).nullable().optional(),
+  email: z.string().email().nullable().optional().or(z.literal("")),
+});
+
+authRouter.put(
+  "/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const data = updateProfileSchema.parse(req.body);
+    if (data.email) {
+      const existing = await prisma.user.findUnique({ where: { email: data.email } });
+      if (existing && existing.id !== req.user!.id) throw HttpError.conflict("That email is already in use by another account");
+    }
+    const user = await prisma.user.update({
+      where: { id: req.user!.id },
+      data: {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email === undefined ? undefined : data.email || null,
+      },
+    });
+    res.json({ user: sanitizeUser(user) });
+  })
+);
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: passwordSchema,
+});
+
+authRouter.post(
+  "/change-password",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.user!.id } });
+    if (!user.passwordHash || !(await verifyPassword(currentPassword, user.passwordHash))) {
+      throw HttpError.unauthorized("Current password is incorrect");
+    }
+
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(newPassword) } });
+    // Changing your own password ends every other session — only this
+    // device stays signed in (a fresh session is issued right after).
+    await prisma.refreshToken.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: new Date() } });
+    await logAudit({ userId: user.id, action: "auth.password_changed_self", entityType: "User", entityId: user.id, ipAddress: req.ip });
+
+    const accessToken = await issueSession(res, user);
+    res.json({ user: sanitizeUser(user), accessToken });
+  })
+);
+
 function sanitizeUser(user: {
   id: string;
   email: string | null;

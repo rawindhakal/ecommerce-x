@@ -12,3 +12,7 @@ build/
 coverage/
 *.tsbuildinfo
 packages/db/generated/
+
+# Local-only project journal — deployment/infra specifics that shouldn't be
+# published to this public repo. See CLAUDE.md.
+/history.md
