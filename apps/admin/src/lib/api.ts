@@ -2,10 +2,30 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4100";
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  code?: string;
+  details?: unknown;
+  constructor(status: number, message: string, code?: string, details?: unknown) {
     super(message);
     this.status = status;
+    this.code = code;
+    this.details = details;
   }
+}
+
+// Zod's `err.flatten()` shape, as sent by the API's error handler for
+// VALIDATION_ERROR responses: top-level issues plus one array per field.
+interface ZodFlatten {
+  formErrors?: string[];
+  fieldErrors?: Record<string, string[]>;
+}
+
+function describeValidationError(message: string, details: unknown): string {
+  const flat = details as ZodFlatten | undefined;
+  const parts = [
+    ...(flat?.formErrors ?? []),
+    ...Object.entries(flat?.fieldErrors ?? {}).map(([field, errors]) => `${field}: ${errors.join(", ")}`),
+  ];
+  return parts.length > 0 ? `${message} — ${parts.join("; ")}` : message;
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -18,13 +38,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     let message = res.statusText;
+    let code: string | undefined;
+    let details: unknown;
     try {
       const body = await res.json();
-      message = body.message ?? message;
+      code = body.code;
+      details = body.details;
+      message = body.code === "VALIDATION_ERROR" ? describeValidationError(body.message ?? message, body.details) : body.message ?? message;
     } catch {
-      // ignore
+      // ignore — body wasn't JSON
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, code, details);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -44,6 +68,11 @@ export async function uploadFile(file: File): Promise<string> {
   if (!res.ok) throw new ApiError(res.status, "Upload failed");
   const data = await res.json();
   return data.url as string;
+}
+
+export async function generateImage(prompt: string): Promise<string> {
+  const data = await api.post<{ url: string }>("/api/uploads/generate", { prompt });
+  return data.url;
 }
 
 export { API_URL };

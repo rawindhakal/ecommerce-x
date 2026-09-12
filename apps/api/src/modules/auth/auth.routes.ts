@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "@ecommerce-x/db";
-import { COOKIE_NAMES } from "@ecommerce-x/shared";
+import { COOKIE_NAMES, PHONE_REGEX, PHONE_VALIDATION_MESSAGE } from "@ecommerce-x/shared";
 import { asyncHandler } from "../../middleware/async-handler.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { hashPassword, verifyPassword, passwordSchema } from "../../lib/password.js";
@@ -48,7 +48,7 @@ async function issueSession(res: import("express").Response, user: { id: string;
 
 // Phone is the primary identifier across the app; email stays a fully
 // optional secondary contact field, never required for register/login.
-const phoneSchema = z.string().trim().min(7, "Enter a valid phone number").max(20);
+const phoneSchema = z.string().trim().regex(PHONE_REGEX, PHONE_VALIDATION_MESSAGE);
 
 const registerSchema = z.object({
   phone: phoneSchema,

@@ -10,7 +10,7 @@ const NAV = [
   { href: "/account/orders", label: "Orders" },
   { href: "/account/addresses", label: "Addresses" },
   { href: "/account/wishlist", label: "Wishlist" },
-  { href: "/account/loyalty", label: "Loyalty Points" },
+  { href: "/account/loyalty", label: "GlowPoints" },
 ];
 
 export default function AccountLayout({ children }: { children: React.ReactNode }) {

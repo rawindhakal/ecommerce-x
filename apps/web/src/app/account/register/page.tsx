@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore, ApiError } from "@/lib/auth-store";
+import { sanitizePhoneInput } from "@ecommerce-x/shared";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -43,7 +44,7 @@ export default function RegisterPage() {
           </div>
           <div>
             <label className="label">Phone Number</label>
-            <input type="tel" inputMode="numeric" autoComplete="tel" required minLength={7} className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            <input type="tel" inputMode="numeric" autoComplete="tel" required minLength={7} maxLength={15} pattern="[0-9]*" className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: sanitizePhoneInput(e.target.value) })} />
           </div>
           <div>
             <label className="label">Email (optional)</label>

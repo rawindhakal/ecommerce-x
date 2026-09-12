@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api";
+import { sanitizePhoneInput } from "@ecommerce-x/shared";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,7 +36,7 @@ export default function LoginPage() {
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <div>
             <label className="label">Phone Number</label>
-            <input type="tel" inputMode="numeric" autoComplete="tel" required className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <input type="tel" inputMode="numeric" autoComplete="tel" required pattern="[0-9]*" maxLength={15} className="input" value={phone} onChange={(e) => setPhone(sanitizePhoneInput(e.target.value))} />
           </div>
           <div>
             <label className="label">Password</label>

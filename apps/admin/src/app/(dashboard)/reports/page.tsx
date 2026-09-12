@@ -13,12 +13,12 @@ import {
   Bar,
   Cell,
 } from "recharts";
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { TrendingUp, TrendingDown, Printer, Users, Receipt, Package } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatNpr } from "@/lib/format";
 import { DateRangeFilter, presetRange, type DateRange } from "@/components/date-range-filter";
 
-type Tab = "overview" | "products" | "payments" | "customers" | "inventory" | "pos";
+type Tab = "overview" | "products" | "payments" | "customers" | "inventory" | "pos" | "zreport";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
@@ -27,6 +27,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "customers", label: "Customers" },
   { key: "inventory", label: "Inventory" },
   { key: "pos", label: "POS Sessions" },
+  { key: "zreport", label: "Z-Report" },
 ];
 
 const CHART_COLORS = ["#C2185B", "#EC4899", "#F59E0B", "#10B981", "#3B82F6", "#8B5CF6"];
@@ -70,6 +71,7 @@ export default function ReportsPage() {
       {tab === "customers" && <CustomersTab qs={qs} />}
       {tab === "inventory" && <InventoryTab />}
       {tab === "pos" && <PosSessionsTab range={range} />}
+      {tab === "zreport" && <ZReportTab />}
     </div>
   );
 }
@@ -108,7 +110,6 @@ function OverviewTab({ qs }: { qs: string }) {
         <StatCard label="Avg Order Value" value={formatNpr(overview?.avgOrderValue ?? 0)} />
         <StatCard label="Units Sold" value={String(overview?.unitsSold ?? 0)} />
         <StatCard label="Discounts Given" value={formatNpr(overview?.discountTotal ?? 0)} />
-        <StatCard label="Tax Collected" value={formatNpr(overview?.taxTotal ?? 0)} />
         <StatCard label="Shipping Collected" value={formatNpr(overview?.shippingTotal ?? 0)} />
       </div>
 
@@ -240,7 +241,7 @@ function CustomersTab({ qs }: { qs: string }) {
     <div className="card overflow-x-auto p-5">
       <h2 className="mb-4 text-sm font-semibold">Top Customers by Spend</h2>
       <table className="table-base">
-        <thead><tr><th>Customer</th><th>Phone</th><th>Orders</th><th>Total Spent</th><th>Loyalty Points</th></tr></thead>
+        <thead><tr><th>Customer</th><th>Phone</th><th>Orders</th><th>Total Spent</th><th>GlowPoints</th></tr></thead>
         <tbody>
           {customers.map((c, i) => (
             <tr key={i}>
@@ -315,6 +316,122 @@ function PosSessionsTab({ range }: { range: DateRange }) {
           {sessions.length === 0 && <tr><td colSpan={8} className="py-6 text-center text-slate-400">No POS sessions in this range</td></tr>}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+interface ZReportData {
+  date: string;
+  totalSales: number;
+  orderCount: number;
+  customerCount: number;
+  unitsSold: number;
+  byChannel: { channel: string; revenue: number; orders: number }[];
+  byPaymentMethod: { gateway: string; revenue: number; count: number }[];
+  itemsSold: { productId: string; name: string; quantitySold: number; revenue: number }[];
+  customers: { key: string; name: string; phone: string | null; email: string | null; isGuest: boolean; orders: number; amountSpent: number }[];
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function ZReportTab() {
+  const [date, setDate] = useState(todayISO());
+  const [data, setData] = useState<ZReportData | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    api.get<ZReportData>(`/api/reports/z-report?date=${date}`).then((d) => {
+      setData(d);
+      setLoading(false);
+    });
+  }, [date]);
+
+  return (
+    <div id="z-report" className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <input type="date" className="input w-auto" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} />
+          <button onClick={() => setDate(todayISO())} className="btn-outline">Today</button>
+        </div>
+        <button onClick={() => window.print()} className="btn-outline"><Printer size={14} /> Print Report</button>
+      </div>
+
+      {loading || !data ? (
+        <p className="py-16 text-center text-sm text-slate-400">Loading day-end report…</p>
+      ) : (
+        <>
+          <div className="card bg-gradient-to-br from-brand-500 to-brand-700 p-6 text-white">
+            <p className="text-sm text-white/70">
+              Z-Report — {new Date(`${data.date}T00:00:00`).toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            </p>
+            <p className="mt-1 text-4xl font-bold">{formatNpr(data.totalSales)}</p>
+            <p className="mt-1 text-sm text-white/70">Total sales across all channels</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <StatCard label="Orders" value={String(data.orderCount)} />
+            <StatCard label="Customers Served" value={String(data.customerCount)} />
+            <StatCard label="Units Sold" value={String(data.unitsSold)} />
+            <StatCard label="Avg Order Value" value={formatNpr(data.orderCount ? data.totalSales / data.orderCount : 0)} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="card overflow-x-auto p-5">
+              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold"><Receipt size={15} /> Sales by Channel</h2>
+              <table className="table-base">
+                <thead><tr><th>Channel</th><th>Orders</th><th>Revenue</th></tr></thead>
+                <tbody>
+                  {data.byChannel.map((c) => <tr key={c.channel}><td>{c.channel}</td><td>{c.orders}</td><td>{formatNpr(c.revenue)}</td></tr>)}
+                  {data.byChannel.length === 0 && <tr><td colSpan={3} className="py-6 text-center text-slate-400">No sales this day</td></tr>}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="card overflow-x-auto p-5">
+              <h2 className="mb-4 text-sm font-semibold">Sales by Payment Method</h2>
+              <table className="table-base">
+                <thead><tr><th>Method</th><th>Count</th><th>Revenue</th></tr></thead>
+                <tbody>
+                  {data.byPaymentMethod.map((m) => <tr key={m.gateway}><td>{m.gateway}</td><td>{m.count}</td><td>{formatNpr(m.revenue)}</td></tr>)}
+                  {data.byPaymentMethod.length === 0 && <tr><td colSpan={3} className="py-6 text-center text-slate-400">No payments this day</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card overflow-x-auto p-5">
+            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold"><Package size={15} /> Items Sold</h2>
+            <table className="table-base">
+              <thead><tr><th>Product</th><th>Qty Sold</th><th>Revenue</th></tr></thead>
+              <tbody>
+                {data.itemsSold.map((i) => <tr key={i.productId}><td>{i.name}</td><td>{i.quantitySold}</td><td>{formatNpr(i.revenue)}</td></tr>)}
+                {data.itemsSold.length === 0 && <tr><td colSpan={3} className="py-6 text-center text-slate-400">No items sold this day</td></tr>}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="card overflow-x-auto p-5">
+            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold"><Users size={15} /> Sales by Customer</h2>
+            <table className="table-base">
+              <thead><tr><th>Customer</th><th>Contact</th><th>Orders</th><th>Amount Spent</th></tr></thead>
+              <tbody>
+                {data.customers.map((c) => (
+                  <tr key={c.key}>
+                    <td>{c.name}{c.isGuest && <span className="badge ml-1.5 bg-slate-100 text-slate-500">Guest</span>}</td>
+                    <td className="text-slate-500">{c.phone ?? c.email ?? "—"}</td>
+                    <td>{c.orders}</td>
+                    <td>{formatNpr(c.amountSpent)}</td>
+                  </tr>
+                ))}
+                {data.customers.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-slate-400">No customers this day</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

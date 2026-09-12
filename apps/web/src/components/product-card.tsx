@@ -2,9 +2,13 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { Heart, ShoppingBag, Star } from "lucide-react";
 import { formatNpr } from "@/lib/format";
 import { useCartStore } from "@/lib/cart-store";
+import { useAuthStore } from "@/lib/auth-store";
+import { useWishlistStore } from "@/lib/wishlist-store";
+import { toast } from "@/lib/toast-store";
 import { trackEvent } from "@/lib/track";
 import { useState } from "react";
 import { imgSrc, isSvg } from "@/lib/image";
@@ -22,8 +26,13 @@ export interface ProductCardData {
 }
 
 export function ProductCard({ product, priority = false }: { product: ProductCardData; priority?: boolean }) {
+  const router = useRouter();
   const addItem = useCartStore((s) => s.addItem);
+  const user = useAuthStore((s) => s.user);
+  const wishlisted = useWishlistStore((s) => s.ids.has(product.id));
+  const toggleWishlist = useWishlistStore((s) => s.toggle);
   const [adding, setAdding] = useState(false);
+  const [togglingWishlist, setTogglingWishlist] = useState(false);
   const image = product.images[0]?.url;
   const firstVariant = product.variants[0];
 
@@ -38,6 +47,24 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
       });
     } finally {
       setAdding(false);
+    }
+  }
+
+  async function handleWishlistToggle(e: React.MouseEvent) {
+    e.preventDefault();
+    if (!user) {
+      toast.info("Sign in to save items to your wishlist");
+      router.push("/account/login");
+      return;
+    }
+    setTogglingWishlist(true);
+    try {
+      await toggleWishlist(product);
+      if (!wishlisted) {
+        trackEvent("add_to_wishlist", { ecommerce: { items: [{ item_id: product.id, item_name: product.name }] } });
+      }
+    } finally {
+      setTogglingWishlist(false);
     }
   }
 
@@ -65,10 +92,15 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
         )}
         <button
           type="button"
-          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-ink/70 opacity-0 shadow transition group-hover:opacity-100 hover:text-brand"
-          aria-label="Add to wishlist"
+          onClick={handleWishlistToggle}
+          disabled={togglingWishlist}
+          className={`absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow transition hover:text-brand disabled:cursor-wait ${
+            wishlisted ? "text-brand opacity-100" : "text-ink/70 opacity-0 group-hover:opacity-100"
+          }`}
+          aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+          aria-pressed={wishlisted}
         >
-          <Heart size={16} />
+          <Heart size={16} className={wishlisted ? "fill-brand" : ""} />
         </button>
         <button
           type="button"

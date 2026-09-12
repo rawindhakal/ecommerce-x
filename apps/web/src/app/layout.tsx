@@ -7,6 +7,7 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { CartDrawer } from "@/components/cart-drawer";
 import { PopupBanner } from "@/components/popup-banner";
+import { Toaster } from "@/components/toaster";
 import { Analytics, GtmNoScript } from "@/components/analytics";
 import { hexToRgbChannels } from "@/lib/color";
 
@@ -105,6 +106,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Footer settings={settings} />
         <CartDrawer />
         <PopupBanner />
+        <Toaster />
       </body>
     </html>
   );

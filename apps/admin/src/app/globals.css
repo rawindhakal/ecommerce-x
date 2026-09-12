@@ -2,46 +2,69 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+/* These custom classes must live in the "components" layer, not as bare
+   top-level rules — otherwise PostCSS emits them textually after the
+   `@tailwind utilities` output (since they're written below it in this
+   file), which makes them win the cascade over utility overrides like
+   `w-auto`/`w-fit`/`max-w-*` combined on the same element (e.g.
+   `className="input w-auto"` would stay full-width instead of shrinking).
+   @layer reorders them into the components layer regardless of source
+   position, so utilities correctly override them again. */
+@layer components {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100;
+  }
+
+  .label {
+    @apply mb-1 block text-xs font-medium text-slate-500;
+  }
+
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white;
+  }
+
+  .table-base {
+    @apply w-full text-left text-sm;
+  }
+  .table-base th {
+    @apply border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+  .table-base td {
+    @apply border-b border-slate-100 px-4 py-3;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
 }
 
-.btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50;
+@keyframes modal-pop-in {
+  from { opacity: 0; transform: scale(0.94) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
-
-.btn-outline {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50;
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
-
-.btn-danger {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100;
-}
-
-.input {
-  @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100;
-}
-
-.label {
-  @apply mb-1 block text-xs font-medium text-slate-500;
-}
-
-.card {
-  @apply rounded-xl border border-slate-200 bg-white;
-}
-
-.table-base {
-  @apply w-full text-left text-sm;
-}
-.table-base th {
-  @apply border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500;
-}
-.table-base td {
-  @apply border-b border-slate-100 px-4 py-3;
-}
-
-.badge {
-  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Professional dark POS terminal theme, scoped to .pos-theme so it never
@@ -73,14 +96,17 @@ body {
   color: var(--pos-text-40);
 }
 
-/* 80mm receipt printing: #pos-receipt is always mounted off-screen (see
-   Receipt80mm component) so it can be printed without a popup window. */
+/* Printing: #pos-receipt (80mm thermal, always mounted off-screen — see
+   Receipt80mm component) and #z-report (normal page size, printed from the
+   Reports > Z-Report tab) are the only two things ever printed from the
+   admin app. Named page "pos-receipt" scopes the 80mm paper size to just
+   the receipt so a normal-size report print isn't forced onto it too. */
 @media print {
   body * {
     visibility: hidden;
   }
-  #pos-receipt,
-  #pos-receipt * {
+  #pos-receipt, #pos-receipt *,
+  #z-report, #z-report * {
     visibility: visible;
   }
   #pos-receipt {
@@ -88,9 +114,16 @@ body {
     left: 0;
     top: 0;
     width: 80mm;
+    page: pos-receipt;
   }
-  @page {
-    size: 80mm auto;
-    margin: 0;
+  #z-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
   }
+}
+@page pos-receipt {
+  size: 80mm auto;
+  margin: 0;
 }

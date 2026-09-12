@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Upload, Pencil, X } from "lucide-react";
-import { api, uploadFile, API_URL } from "@/lib/api";
+import { api, uploadFile, ApiError, API_URL } from "@/lib/api";
+import { toast } from "@/lib/toast-store";
 
 interface Banner {
   id: string;
@@ -29,10 +30,34 @@ interface Category {
 }
 
 const PLACEMENTS = [
-  { value: "HOME_HERO", label: "Home Hero", hint: "Full-width rotating banner at the very top of the homepage." },
-  { value: "HOME_PROMO", label: "Home Promo", hint: "Secondary promo strip further down the homepage. All active ones show, in order." },
-  { value: "CATEGORY_TOP", label: "Category Top", hint: "Shows above the product grid on a category page. Leave category unset to show on every category page." },
-  { value: "POPUP", label: "Popup", hint: "Shows as a dismissible overlay shortly after a visitor lands on the site." },
+  {
+    value: "HOME_HERO",
+    label: "Home Hero",
+    hint: "Full-width rotating banner at the very top of the homepage.",
+    desktopSize: "1920 × 900px (min 1600 × 750px, same ratio)",
+    mobileSize: "1080 × 1350px",
+  },
+  {
+    value: "HOME_PROMO",
+    label: "Home Promo",
+    hint: "Secondary promo strip further down the homepage. All active ones show, in order.",
+    desktopSize: "800 × 600px",
+    mobileSize: "800 × 600px",
+  },
+  {
+    value: "CATEGORY_TOP",
+    label: "Category Top",
+    hint: "Shows above the product grid on a category page. Leave category unset to show on every category page.",
+    desktopSize: "1600 × 500px",
+    mobileSize: "1000 × 700px",
+  },
+  {
+    value: "POPUP",
+    label: "Popup",
+    hint: "Shows as a dismissible overlay shortly after a visitor lands on the site.",
+    desktopSize: "800 × 800px (square, or 800 × 600px)",
+    mobileSize: "800 × 800px",
+  },
 ];
 
 const empty = {
@@ -108,12 +133,25 @@ export default function BannersPage() {
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>, field: "imageUrl" | "mobileImageUrl") {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = await uploadFile(file);
-    setForm((f: any) => ({ ...f, [field]: url }));
+    try {
+      const url = await uploadFile(file);
+      setForm((f: any) => ({ ...f, [field]: url }));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Image upload failed. Please try again.");
+    } finally {
+      e.target.value = "";
+    }
   }
+
+  const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!form.imageUrl) {
+      toast.error("Upload a desktop image before saving the banner.");
+      return;
+    }
+    setSaving(true);
     const payload = {
       ...form,
       sortOrder: Number(form.sortOrder),
@@ -125,26 +163,42 @@ export default function BannersPage() {
       startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
       endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
     };
-    if (editingId) {
-      await api.put(`/api/banners/${editingId}`, payload);
-    } else {
-      await api.post("/api/banners", payload);
+    try {
+      if (editingId) {
+        await api.put(`/api/banners/${editingId}`, payload);
+      } else {
+        await api.post("/api/banners", payload);
+      }
+      toast.success(editingId ? "Banner updated" : "Banner created");
+      setShowForm(false);
+      setEditingId(null);
+      setForm(empty);
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save banner. Please try again.");
+    } finally {
+      setSaving(false);
     }
-    setShowForm(false);
-    setEditingId(null);
-    setForm(empty);
-    load();
   }
 
   async function toggle(b: Banner) {
-    await api.put(`/api/banners/${b.id}`, { isActive: !b.isActive });
-    load();
+    try {
+      await api.put(`/api/banners/${b.id}`, { isActive: !b.isActive });
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to update banner status.");
+    }
   }
 
   async function remove(id: string) {
     if (!confirm("Delete this banner?")) return;
-    await api.delete(`/api/banners/${id}`);
-    load();
+    try {
+      await api.delete(`/api/banners/${id}`);
+      toast.success("Banner deleted");
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to delete banner.");
+    }
   }
 
   const grouped = PLACEMENTS.map((p) => ({ ...p, items: banners.filter((b) => b.placement === p.value) }));
@@ -213,16 +267,18 @@ export default function BannersPage() {
 
           <div>
             <label className="label">Desktop Image</label>
+            <p className="mb-1.5 text-xs text-slate-400">Recommended size: {PLACEMENTS.find((p) => p.value === form.placement)?.desktopSize}</p>
             {form.imageUrl && <img src={imgUrl(form.imageUrl)} className="mb-2 h-24 rounded-lg object-cover" />}
             <label className="btn-outline w-fit cursor-pointer"><Upload size={14} /> Upload<input type="file" accept="image/*" className="hidden" onChange={(e) => handleUpload(e, "imageUrl")} /></label>
           </div>
           <div>
             <label className="label">Mobile Image (optional — falls back to desktop)</label>
+            <p className="mb-1.5 text-xs text-slate-400">Recommended size: {PLACEMENTS.find((p) => p.value === form.placement)?.mobileSize}</p>
             {form.mobileImageUrl && <img src={imgUrl(form.mobileImageUrl)} className="mb-2 h-24 rounded-lg object-cover" />}
             <label className="btn-outline w-fit cursor-pointer"><Upload size={14} /> Upload<input type="file" accept="image/*" className="hidden" onChange={(e) => handleUpload(e, "mobileImageUrl")} /></label>
           </div>
 
-          <button type="submit" className="btn-primary sm:col-span-2">{editingId ? "Save Changes" : "Create Banner"}</button>
+          <button type="submit" disabled={saving} className="btn-primary sm:col-span-2">{saving ? "Saving…" : editingId ? "Save Changes" : "Create Banner"}</button>
         </form>
       )}
 

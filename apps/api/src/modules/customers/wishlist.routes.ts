@@ -12,7 +12,14 @@ wishlistRouter.get(
   asyncHandler(async (req, res) => {
     const items = await prisma.wishlistItem.findMany({
       where: { userId: req.user!.id },
-      include: { product: { include: { images: { take: 1, orderBy: { sortOrder: "asc" } } } } },
+      include: {
+        product: {
+          include: {
+            images: { take: 1, orderBy: { sortOrder: "asc" } },
+            variants: { where: { isActive: true }, take: 1, orderBy: { createdAt: "asc" } },
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
     res.json(items);

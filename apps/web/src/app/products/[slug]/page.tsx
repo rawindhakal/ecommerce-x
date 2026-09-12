@@ -117,7 +117,17 @@ export default async function ProductPage(props: { params: Promise<{ slug: strin
         <span className="text-ink/70">{product.name}</span>
       </nav>
 
-      <ProductDetail productId={product.id} productName={product.name} images={product.images} variants={product.variants} brand={product.brand} />
+      <ProductDetail
+        productId={product.id}
+        productName={product.name}
+        productSlug={product.slug}
+        basePrice={product.basePrice}
+        avgRating={product.avgRating}
+        reviewCount={product.reviewCount}
+        images={product.images}
+        variants={product.variants}
+        brand={product.brand}
+      />
 
       {product.description && (
         <div className="mt-14 max-w-3xl">

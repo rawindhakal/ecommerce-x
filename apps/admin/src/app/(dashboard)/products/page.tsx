@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, Search } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, API_URL } from "@/lib/api";
 import { formatNpr } from "@/lib/format";
 import type { PaginatedResult } from "@ecommerce-x/shared";
 
@@ -15,7 +15,21 @@ interface Product {
   basePrice: string;
   category: { name: string } | null;
   brand: { name: string } | null;
+  images: { url: string }[];
   variants: { inventory: { quantityOnHand: number }[] }[];
+}
+
+function imgSrc(url: string) {
+  return url.startsWith("http") ? url : `${API_URL}${url}`;
+}
+
+function ProductThumb({ product }: { product: Product }) {
+  const url = product.images[0]?.url;
+  if (!url) {
+    return <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[10px] text-slate-400">No img</div>;
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={imgSrc(url)} alt="" className="h-10 w-10 flex-shrink-0 rounded-lg border border-slate-200 object-cover" />;
 }
 
 export default function ProductsPage() {
@@ -30,7 +44,11 @@ export default function ProductsPage() {
     setResult(await api.get<PaginatedResult<Product>>(`/api/products/admin?${qs.toString()}`));
   }
 
-  useEffect(() => { load(); }, [status]);
+  // Live search: debounce as-you-type so results update without needing Enter.
+  useEffect(() => {
+    const t = setTimeout(() => { load(); }, 300);
+    return () => clearTimeout(t);
+  }, [search, status]);
 
   return (
     <div className="space-y-6">
@@ -67,7 +85,12 @@ export default function ProductsPage() {
               const stock = p.variants.reduce((sum, v) => sum + v.inventory.reduce((s, i) => s + i.quantityOnHand, 0), 0);
               return (
                 <tr key={p.id}>
-                  <td><Link href={`/products/${p.id}`} className="font-medium text-brand-600 hover:underline">{p.name}</Link></td>
+                  <td>
+                    <Link href={`/products/${p.id}`} className="flex items-center gap-3 font-medium text-brand-600 hover:underline">
+                      <ProductThumb product={p} />
+                      {p.name}
+                    </Link>
+                  </td>
                   <td className="text-slate-500">{p.category?.name ?? "—"}</td>
                   <td className="text-slate-500">{p.brand?.name ?? "—"}</td>
                   <td>{formatNpr(p.basePrice)}</td>
@@ -85,15 +108,18 @@ export default function ProductsPage() {
         {result?.items.map((p) => {
           const stock = p.variants.reduce((sum, v) => sum + v.inventory.reduce((s, i) => s + i.quantityOnHand, 0), 0);
           return (
-            <Link key={p.id} href={`/products/${p.id}`} className="card block p-4">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-brand-600">{p.name}</span>
-                <span className="badge bg-slate-100 text-slate-600">{p.status}</span>
-              </div>
-              <p className="mt-1 text-sm text-slate-500">{p.category?.name ?? "—"} {p.brand?.name ? `· ${p.brand.name}` : ""}</p>
-              <div className="mt-2 flex items-center justify-between text-sm">
-                <span className={stock <= 5 ? "font-medium text-red-500" : "text-slate-500"}>{stock} in stock</span>
-                <span className="font-semibold">{formatNpr(p.basePrice)}</span>
+            <Link key={p.id} href={`/products/${p.id}`} className="card flex gap-3 p-4">
+              <ProductThumb product={p} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="truncate font-medium text-brand-600">{p.name}</span>
+                  <span className="badge bg-slate-100 text-slate-600">{p.status}</span>
+                </div>
+                <p className="mt-1 text-sm text-slate-500">{p.category?.name ?? "—"} {p.brand?.name ? `· ${p.brand.name}` : ""}</p>
+                <div className="mt-2 flex items-center justify-between text-sm">
+                  <span className={stock <= 5 ? "font-medium text-red-500" : "text-slate-500"}>{stock} in stock</span>
+                  <span className="font-semibold">{formatNpr(p.basePrice)}</span>
+                </div>
               </div>
             </Link>
           );

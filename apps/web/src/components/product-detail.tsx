@@ -3,9 +3,13 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Minus, Plus, ShoppingBag, Heart, Star } from "lucide-react";
 import { formatNpr } from "@/lib/format";
 import { useCartStore } from "@/lib/cart-store";
+import { useAuthStore } from "@/lib/auth-store";
+import { useWishlistStore } from "@/lib/wishlist-store";
+import { toast } from "@/lib/toast-store";
 import { trackEvent } from "@/lib/track";
 import { imgSrc, isSvg } from "@/lib/image";
 
@@ -22,12 +26,21 @@ interface Variant {
 interface Props {
   productId: string;
   productName: string;
+  productSlug: string;
+  basePrice: string;
+  avgRating: string;
+  reviewCount: number;
   images: { url: string; altText: string | null }[];
   variants: Variant[];
   brand?: { name: string; slug: string; logoUrl: string | null } | null;
 }
 
-export function ProductDetail({ productId, productName, images, variants, brand }: Props) {
+export function ProductDetail({ productId, productName, productSlug, basePrice, avgRating, reviewCount, images, variants, brand }: Props) {
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const wishlisted = useWishlistStore((s) => s.ids.has(productId));
+  const toggleWishlist = useWishlistStore((s) => s.toggle);
+  const [togglingWishlist, setTogglingWishlist] = useState(false);
   const optionKeys = useMemo(() => {
     const keys = new Set<string>();
     variants.forEach((v) => Object.keys(v.options).forEach((k) => keys.add(k)));
@@ -62,6 +75,32 @@ export function ProductDetail({ productId, productName, images, variants, brand 
       setTimeout(() => setAdded(false), 2000);
     } finally {
       setAdding(false);
+    }
+  }
+
+  async function handleWishlistToggle() {
+    if (!user) {
+      toast.info("Sign in to save items to your wishlist");
+      router.push("/account/login");
+      return;
+    }
+    setTogglingWishlist(true);
+    try {
+      await toggleWishlist({
+        id: productId,
+        name: productName,
+        slug: productSlug,
+        basePrice,
+        avgRating,
+        reviewCount,
+        images,
+        variants: variants.map((v) => ({ id: v.id, price: v.price })),
+      });
+      if (!wishlisted) {
+        trackEvent("add_to_wishlist", { ecommerce: { items: [{ item_id: productId, item_name: productName }] } });
+      }
+    } finally {
+      setTogglingWishlist(false);
     }
   }
 
@@ -158,8 +197,14 @@ export function ProductDetail({ productId, productName, images, variants, brand 
             <ShoppingBag size={16} />
             {stock === 0 ? "Out of Stock" : added ? "Added!" : adding ? "Adding…" : "Add to Bag"}
           </button>
-          <button className="btn-outline px-4" aria-label="Wishlist">
-            <Heart size={16} />
+          <button
+            onClick={handleWishlistToggle}
+            disabled={togglingWishlist}
+            className={`btn-outline px-4 disabled:cursor-wait ${wishlisted ? "border-brand text-brand" : ""}`}
+            aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+            aria-pressed={wishlisted}
+          >
+            <Heart size={16} className={wishlisted ? "fill-brand" : ""} />
           </button>
         </div>
       </div>

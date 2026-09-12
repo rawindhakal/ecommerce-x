@@ -3,9 +3,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { Search, Heart, User, ShoppingBag, Menu, X, ChevronDown } from "lucide-react";
+import { Search, Heart, User, ShoppingBag, Menu, X, ChevronDown, Sparkles } from "lucide-react";
 import { useCartStore } from "@/lib/cart-store";
 import { useAuthStore } from "@/lib/auth-store";
+import { useWishlistStore } from "@/lib/wishlist-store";
 import type { PublicSettings } from "@/lib/settings";
 
 interface CategoryLink {
@@ -18,6 +19,8 @@ interface CategoryLink {
 export function Header({ settings, categories }: { settings: PublicSettings; categories: CategoryLink[] }) {
   const { cart, fetchCart, setOpen } = useCartStore();
   const { user, fetchMe, initialized } = useAuthStore();
+  const wishlistCount = useWishlistStore((s) => s.ids.size);
+  const fetchWishlist = useWishlistStore((s) => s.fetchWishlist);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -25,6 +28,10 @@ export function Header({ settings, categories }: { settings: PublicSettings; cat
     fetchCart();
     if (!initialized) fetchMe();
   }, [fetchCart, fetchMe, initialized]);
+
+  useEffect(() => {
+    if (user) fetchWishlist();
+  }, [user, fetchWishlist]);
 
   const itemCount = cart?.items.reduce((sum, i) => sum + i.quantity, 0) ?? 0;
 
@@ -80,6 +87,9 @@ export function Header({ settings, categories }: { settings: PublicSettings; cat
           <Link href="/products?featured=true" className="py-2 transition hover:text-brand">
             Featured
           </Link>
+          <Link href="/skin-analysis" className="flex items-center gap-1 py-2 text-brand transition hover:opacity-80">
+            <Sparkles size={14} /> Skin Analysis
+          </Link>
         </nav>
 
         <form action="/search" className="hidden max-w-xs flex-1 items-center rounded-full border border-ink/10 px-4 py-2 md:flex">
@@ -91,8 +101,13 @@ export function Header({ settings, categories }: { settings: PublicSettings; cat
           <Link href={user ? "/account" : "/account/login"} aria-label="Account" className="flex h-11 w-11 items-center justify-center">
             <User size={20} />
           </Link>
-          <Link href="/account/wishlist" aria-label="Wishlist" className="flex h-11 w-11 items-center justify-center">
+          <Link href="/account/wishlist" aria-label="Wishlist" className="relative flex h-11 w-11 items-center justify-center">
             <Heart size={20} />
+            {wishlistCount > 0 && (
+              <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-brand text-[10px] text-white">
+                {wishlistCount}
+              </span>
+            )}
           </Link>
           <button onClick={() => setOpen(true)} className="relative flex h-11 w-11 items-center justify-center" aria-label="Cart">
             <ShoppingBag size={20} />
@@ -151,6 +166,9 @@ export function Header({ settings, categories }: { settings: PublicSettings; cat
             ))}
             <Link href="/products?featured=true" className="flex min-h-[44px] items-center px-2 text-sm font-medium" onClick={() => setMobileOpen(false)}>
               Featured
+            </Link>
+            <Link href="/skin-analysis" className="flex min-h-[44px] items-center gap-1.5 px-2 text-sm font-medium text-brand" onClick={() => setMobileOpen(false)}>
+              <Sparkles size={14} /> Skin Analysis
             </Link>
           </nav>
         </div>

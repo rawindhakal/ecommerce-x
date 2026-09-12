@@ -17,11 +17,11 @@ export default function LoyaltyPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl">Loyalty Points</h1>
+      <h1 className="font-display text-2xl">GlowPoints</h1>
       <div className="card mt-4 p-6">
         <p className="text-sm text-ink/50">Current Balance</p>
-        <p className="mt-1 text-4xl font-semibold text-brand">{data?.balance ?? 0} pts</p>
-        <p className="mt-2 text-xs text-ink/40">Earn points on every purchase. Redeem them at checkout for a discount.</p>
+        <p className="mt-1 text-4xl font-semibold text-brand">{data?.balance ?? 0} GlowPoints</p>
+        <p className="mt-2 text-xs text-ink/40">Earn GlowPoints on every purchase. Redeem them at checkout for a discount.</p>
       </div>
 
       <div className="card mt-6 divide-y divide-ink/10">

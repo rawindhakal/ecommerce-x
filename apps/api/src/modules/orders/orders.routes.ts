@@ -10,13 +10,14 @@ import { createOrderFromCart, restockOrder } from "./orders.service.js";
 import { getGateway } from "../../payments/index.js";
 import { customAlphabet } from "nanoid";
 import { env } from "../../config/env.js";
+import { PHONE_REGEX, PHONE_VALIDATION_MESSAGE } from "@ecommerce-x/shared";
 
 export const ordersRouter = Router();
 const nanoid = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 12);
 
 const addressSchema = z.object({
   fullName: z.string(),
-  phone: z.string(),
+  phone: z.string().regex(PHONE_REGEX, PHONE_VALIDATION_MESSAGE),
   province: z.string(),
   district: z.string(),
   municipality: z.string(),
@@ -28,7 +29,7 @@ const addressSchema = z.object({
 const checkoutSchema = z.object({
   customerName: z.string().min(1),
   customerEmail: z.string().email().optional(),
-  customerPhone: z.string().min(6),
+  customerPhone: z.string().regex(PHONE_REGEX, PHONE_VALIDATION_MESSAGE),
   shippingAddress: addressSchema,
   billingAddress: addressSchema.optional(),
   customerNote: z.string().optional(),

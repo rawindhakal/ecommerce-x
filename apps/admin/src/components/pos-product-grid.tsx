@@ -9,7 +9,7 @@ export interface PosVariant {
   name: string | null;
   price: string;
   options: Record<string, string>;
-  product: { name: string; taxable: boolean; taxRate: { rate: string } | null; images: { url: string }[] };
+  product: { name: string; images: { url: string }[] };
   inventory: { quantityOnHand: number; quantityReserved: number }[];
 }
 

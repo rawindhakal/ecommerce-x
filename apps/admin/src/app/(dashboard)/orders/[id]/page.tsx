@@ -16,7 +16,6 @@ interface OrderDetail {
   shippingAddress: Record<string, string> | null;
   subtotal: string;
   discountTotal: string;
-  taxTotal: string;
   shippingTotal: string;
   loyaltyDiscount: string;
   total: string;
@@ -83,8 +82,7 @@ export default function OrderDetailPage(props: { params: Promise<{ id: string }>
             <div className="flex justify-between text-slate-500"><span>Subtotal</span><span>{formatNpr(order.subtotal)}</span></div>
             <div className="flex justify-between text-slate-500"><span>Discount</span><span>-{formatNpr(order.discountTotal)}</span></div>
             <div className="flex justify-between text-slate-500"><span>Shipping</span><span>{formatNpr(order.shippingTotal)}</span></div>
-            <div className="flex justify-between text-slate-500"><span>Tax</span><span>{formatNpr(order.taxTotal)}</span></div>
-            {Number(order.loyaltyDiscount) > 0 && <div className="flex justify-between text-slate-500"><span>Loyalty Discount</span><span>-{formatNpr(order.loyaltyDiscount)}</span></div>}
+            {Number(order.loyaltyDiscount) > 0 && <div className="flex justify-between text-slate-500"><span>GlowPoints Redeemed</span><span>-{formatNpr(order.loyaltyDiscount)}</span></div>}
             <div className="flex justify-between font-semibold"><span>Total</span><span>{formatNpr(order.total)}</span></div>
           </div>
         </div>

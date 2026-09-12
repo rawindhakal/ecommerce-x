@@ -21,6 +21,7 @@ export const env = {
   settingsEncryptionKey: required("SETTINGS_ENCRYPTION_KEY"),
   uploadDir: process.env.UPLOAD_DIR ?? "./uploads",
   databaseUrl: required("DATABASE_URL"),
+  geminiApiKey: process.env.GEMINI_API_KEY ?? "",
 
   esewa: {
     merchantCode: process.env.ESEWA_MERCHANT_CODE ?? "EPAYTEST",

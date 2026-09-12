@@ -7,7 +7,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import { api, ApiError } from "@/lib/api";
 import { formatNpr } from "@/lib/format";
 import { trackEvent } from "@/lib/track";
-import { NEPAL_PROVINCES } from "@ecommerce-x/shared";
+import { NEPAL_PROVINCES, sanitizePhoneInput } from "@ecommerce-x/shared";
 
 interface PaymentSettings {
   payments: Record<string, { enabled: boolean; mode: string }>;
@@ -152,7 +152,7 @@ export default function CheckoutPage() {
               </div>
               <div>
                 <label className="label">Phone</label>
-                <input required className="input" value={form.customerPhone} onChange={(e) => setForm({ ...form, customerPhone: e.target.value })} />
+                <input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} required className="input" value={form.customerPhone} onChange={(e) => setForm({ ...form, customerPhone: sanitizePhoneInput(e.target.value) })} />
               </div>
               <div className="sm:col-span-2">
                 <label className="label">Email (optional)</label>
@@ -221,7 +221,7 @@ export default function CheckoutPage() {
           <div className="mt-4 space-y-1 border-t border-ink/10 pt-4 text-sm">
             <div className="flex justify-between text-ink/60"><span>Subtotal</span><span>{formatNpr(cart.totals.subtotal)}</span></div>
             {cart.totals.discount > 0 && <div className="flex justify-between text-brand"><span>Discount</span><span>-{formatNpr(cart.totals.discount)}</span></div>}
-            <p className="text-xs text-ink/40">Shipping & tax calculated on order confirmation</p>
+            <p className="text-xs text-ink/40">Shipping calculated on order confirmation</p>
           </div>
           <button type="submit" disabled={submitting} className="btn-primary mt-5 w-full">
             {submitting ? "Placing Order…" : "Place Order"}

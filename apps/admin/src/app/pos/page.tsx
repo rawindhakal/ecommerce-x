@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatNpr } from "@/lib/format";
+import { sanitizePhoneInput } from "@ecommerce-x/shared";
 import { Receipt80mm, type ReceiptData } from "@/components/receipt-80mm";
 import { PosProductGrid, stockOf, type PosVariant } from "@/components/pos-product-grid";
 
@@ -31,7 +32,6 @@ interface BasketItem {
   variantName: string | null;
   price: number;
   quantity: number;
-  taxRate: number;
 }
 
 interface Customer {
@@ -41,6 +41,8 @@ interface Customer {
   phone: string | null;
   email: string | null;
   loyaltyPoints: number;
+  creditLimit: string;
+  creditBalance: string;
 }
 
 interface LoyaltyRule {
@@ -72,7 +74,6 @@ function toBasketItem(v: PosVariant): BasketItem {
     variantName: v.name,
     price: Number(v.price),
     quantity: 1,
-    taxRate: v.product.taxable ? Number(v.product.taxRate?.rate ?? 0) : 0,
   };
 }
 
@@ -237,7 +238,6 @@ export default function PosPage() {
   }
 
   const subtotal = basket.reduce((sum, b) => sum + b.price * b.quantity, 0);
-  const taxTotal = basket.reduce((sum, b) => sum + (b.price * b.quantity * b.taxRate) / 100, 0);
   const discount = Number(discountTotal) || 0;
 
   const rule = loyaltyRule;
@@ -246,8 +246,17 @@ export default function PosPage() {
   const redeemVal = Math.min(Number(redeemPoints) || 0, maxRedeemable);
   const loyaltyDiscountEstimate = rule && redeemVal >= rule.minRedeemPoints ? redeemVal * rule.redeemPointValue : 0;
 
-  const total = Math.max(0, subtotal - discount + taxTotal - loyaltyDiscountEstimate);
+  const total = Math.max(0, subtotal - discount - loyaltyDiscountEstimate);
   const change = tendered ? Math.max(0, Number(tendered) - total) : 0;
+
+  // Store credit is only available for an identified customer, and only up
+  // to what's left of their limit — enforced again server-side regardless.
+  const availableCredit = customer ? Math.max(0, Number(customer.creditLimit) - Number(customer.creditBalance)) : 0;
+  const canUseStoreCredit = !!customer && availableCredit >= total && total > 0;
+
+  useEffect(() => {
+    if (paymentMethod === "STORE_CREDIT" && !canUseStoreCredit) setPaymentMethod("CASH");
+  }, [paymentMethod, canUseStoreCredit]);
 
   function printEstimate() {
     if (basket.length === 0) return;
@@ -260,7 +269,6 @@ export default function PosPage() {
       items: basket.map((b) => ({ name: b.productName, variantName: b.variantName, sku: b.sku, quantity: b.quantity, unitPrice: b.price, total: b.price * b.quantity })),
       subtotal,
       discountTotal: discount,
-      taxTotal,
       total,
     });
   }
@@ -299,9 +307,8 @@ export default function PosPage() {
         items: res.order.items.map((i: any) => ({ name: i.name, variantName: i.variantName, sku: i.sku, quantity: i.quantity, unitPrice: Number(i.unitPrice), total: Number(i.total) })),
         subtotal: Number(res.order.subtotal),
         discountTotal: Number(res.order.discountTotal),
-        taxTotal: Number(res.order.taxTotal),
         total: Number(res.order.total),
-        paymentMethod,
+        paymentMethod: paymentMethod.replace("_", " "),
         amountTendered: tendered ? Number(tendered) : undefined,
         change: res.change,
         loyaltyPointsEarned: res.order.loyaltyPointsEarnedNow ?? undefined,
@@ -310,6 +317,7 @@ export default function PosPage() {
 
       setBasket([]);
       setCustomer(null);
+      setPaymentMethod("CASH");
       setRedeemPoints("");
       setDiscountTotal("0");
       setTendered("");
@@ -458,7 +466,12 @@ export default function PosPage() {
               <div className="mt-2 flex items-center justify-between rounded-md bg-[var(--pos-brand)]/15 px-2.5 py-2">
                 <div className="min-w-0">
                   <p className="truncate text-xs font-semibold">{customer.firstName} {customer.lastName}</p>
-                  <p className="text-[10px] text-[var(--pos-text-50)]">{customer.phone} · {customer.loyaltyPoints} pts</p>
+                  <p className="text-[10px] text-[var(--pos-text-50)]">{customer.phone} · {customer.loyaltyPoints} GlowPoints</p>
+                  {Number(customer.creditLimit) > 0 && (
+                    <p className="text-[10px] text-[var(--pos-text-50)]">
+                      Store credit: {formatNpr(availableCredit)} available of {formatNpr(customer.creditLimit)}
+                    </p>
+                  )}
                 </div>
                 <button onClick={() => setCustomer(null)} className="flex h-7 w-7 flex-shrink-0 items-center justify-center text-[var(--pos-text-40)] hover:text-[var(--pos-red)]"><X size={14} /></button>
               </div>
@@ -474,10 +487,14 @@ export default function PosPage() {
             {showCustomerSearch && !customer && (
               <div className="relative mt-2">
                 <input
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={15}
                   className="w-full rounded-md border border-[var(--pos-line)] bg-[var(--pos-surface)] px-2.5 py-2 text-xs"
                   placeholder="Search by phone…"
                   value={phoneQuery}
-                  onChange={(e) => setPhoneQuery(e.target.value)}
+                  onChange={(e) => setPhoneQuery(sanitizePhoneInput(e.target.value))}
                 />
                 {customerResults.length > 0 && (
                   <div className="absolute z-20 mt-1 w-full rounded-md border border-[var(--pos-line)] bg-[var(--pos-surface-strong)] shadow-xl">
@@ -488,7 +505,7 @@ export default function PosPage() {
                         className="flex w-full items-center justify-between border-b border-[var(--pos-line)] px-2.5 py-2 text-left text-xs last:border-0 hover:bg-[var(--pos-surface-hover)]"
                       >
                         <span>{c.firstName} {c.lastName} — {c.phone}</span>
-                        <span className="text-[var(--pos-text-40)]">{c.loyaltyPoints} pts</span>
+                        <span className="text-[var(--pos-text-40)]">{c.loyaltyPoints} GlowPoints</span>
                       </button>
                     ))}
                   </div>
@@ -501,7 +518,7 @@ export default function PosPage() {
                   <form onSubmit={createCustomer} className="mt-2 grid grid-cols-2 gap-1.5 rounded-md border border-[var(--pos-line)] p-2">
                     <input required placeholder="First name" className="rounded border border-[var(--pos-line)] bg-[var(--pos-surface)] px-2 py-1.5 text-xs" value={newCustomer.firstName} onChange={(e) => setNewCustomer({ ...newCustomer, firstName: e.target.value })} />
                     <input placeholder="Last name" className="rounded border border-[var(--pos-line)] bg-[var(--pos-surface)] px-2 py-1.5 text-xs" value={newCustomer.lastName} onChange={(e) => setNewCustomer({ ...newCustomer, lastName: e.target.value })} />
-                    <input required placeholder="Phone" className="col-span-2 rounded border border-[var(--pos-line)] bg-[var(--pos-surface)] px-2 py-1.5 text-xs" value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} />
+                    <input required type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} placeholder="Phone" className="col-span-2 rounded border border-[var(--pos-line)] bg-[var(--pos-surface)] px-2 py-1.5 text-xs" value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: sanitizePhoneInput(e.target.value) })} />
                     <button type="submit" className="col-span-2 rounded bg-[var(--pos-green)] py-1.5 text-xs font-bold text-black">Save Customer</button>
                   </form>
                 )}
@@ -510,7 +527,7 @@ export default function PosPage() {
 
             {customer && rule && customer.loyaltyPoints >= rule.minRedeemPoints && (
               <div className="mt-2">
-                <label className="mb-1 block text-[10px] uppercase tracking-wide text-[var(--pos-text-40)]">Redeem points (min {rule.minRedeemPoints}, max {maxRedeemable})</label>
+                <label className="mb-1 block text-[10px] uppercase tracking-wide text-[var(--pos-text-40)]">Redeem GlowPoints (min {rule.minRedeemPoints}, max {maxRedeemable})</label>
                 <input type="number" className="w-full rounded-md border border-[var(--pos-line)] bg-[var(--pos-surface)] px-2.5 py-1.5 text-xs" placeholder="0" value={redeemPoints} onChange={(e) => setRedeemPoints(e.target.value)} />
               </div>
             )}
@@ -603,23 +620,32 @@ export default function PosPage() {
                 )}
               </div>
               {loyaltyDiscountEstimate > 0 && (
-                <div className="flex justify-between text-[var(--pos-text-50)]"><span>Loyalty Points</span><span>-{formatNpr(loyaltyDiscountEstimate)}</span></div>
+                <div className="flex justify-between text-[var(--pos-text-50)]"><span>GlowPoints Redeemed</span><span>-{formatNpr(loyaltyDiscountEstimate)}</span></div>
               )}
-              <div className="flex justify-between text-[var(--pos-text-50)]"><span>VAT</span><span>{formatNpr(taxTotal)}</span></div>
               <div className="flex justify-between border-t border-[var(--pos-line)] pt-1.5 text-lg font-bold text-[var(--pos-green)]"><span>TOTAL DUE</span><span>{formatNpr(total)}</span></div>
             </div>
 
-            <div className="mt-3 grid grid-cols-4 gap-1.5">
-              {["CASH", "CARD_POS", "FONEPAY", "ESEWA"].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setPaymentMethod(m)}
-                  className={`min-h-[36px] rounded-md text-[11px] font-semibold ${paymentMethod === m ? "bg-[var(--pos-brand)] text-white" : "bg-[var(--pos-surface)] text-[var(--pos-text-60)]"}`}
-                >
-                  {m.replace("_", " ")}
-                </button>
-              ))}
+            <div className="mt-3 grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+              {["CASH", "CARD_POS", "FONEPAY", "ESEWA", "STORE_CREDIT"].map((m) => {
+                const disabled = m === "STORE_CREDIT" && !canUseStoreCredit;
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setPaymentMethod(m)}
+                    disabled={disabled}
+                    title={disabled ? (!customer ? "Attach a customer to use store credit" : "Exceeds available credit") : undefined}
+                    className={`min-h-[36px] rounded-md text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-30 ${paymentMethod === m ? "bg-[var(--pos-brand)] text-white" : "bg-[var(--pos-surface)] text-[var(--pos-text-60)]"}`}
+                  >
+                    {m.replace("_", " ")}
+                  </button>
+                );
+              })}
             </div>
+            {paymentMethod === "STORE_CREDIT" && customer && (
+              <p className="mt-2 text-[11px] text-[var(--pos-text-50)]">
+                This sale will be charged to {customer.firstName}'s account. New balance after sale: {formatNpr(Number(customer.creditBalance) + total)}.
+              </p>
+            )}
             {paymentMethod === "CASH" && (
               <div className="mt-2 flex items-center gap-2">
                 <input type="number" className="flex-1 rounded-md border border-[var(--pos-line)] bg-[var(--pos-surface)] px-2.5 py-1.5 text-xs" placeholder="Amount tendered" value={tendered} onChange={(e) => setTendered(e.target.value)} />
@@ -655,7 +681,7 @@ export default function PosPage() {
               </div>
               <div>
                 <label className="mb-1 block text-xs text-[var(--pos-text-50)]">Phone</label>
-                <input className="w-full rounded-lg border border-[var(--pos-line)] bg-[var(--pos-surface)] px-3 py-2 text-sm" value={billTo.phone} onChange={(e) => setBillTo({ ...billTo, phone: e.target.value })} />
+                <input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} className="w-full rounded-lg border border-[var(--pos-line)] bg-[var(--pos-surface)] px-3 py-2 text-sm" value={billTo.phone} onChange={(e) => setBillTo({ ...billTo, phone: sanitizePhoneInput(e.target.value) })} />
               </div>
             </div>
             <div className="mt-3 space-y-1 rounded-lg bg-[var(--pos-surface)] p-3 text-sm">

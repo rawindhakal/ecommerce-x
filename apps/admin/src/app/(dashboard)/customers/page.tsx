@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Search, Plus } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
-import type { PaginatedResult } from "@ecommerce-x/shared";
+import { sanitizePhoneInput, type PaginatedResult } from "@ecommerce-x/shared";
 
 interface UserRow {
   id: string;
@@ -55,7 +55,7 @@ export default function CustomersPage() {
         <form onSubmit={createStaff} className="card grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
           <input required placeholder="First name" className="input" value={staffForm.firstName} onChange={(e) => setStaffForm({ ...staffForm, firstName: e.target.value })} />
           <input placeholder="Last name" className="input" value={staffForm.lastName} onChange={(e) => setStaffForm({ ...staffForm, lastName: e.target.value })} />
-          <input required type="tel" placeholder="Phone Number" className="input" value={staffForm.phone} onChange={(e) => setStaffForm({ ...staffForm, phone: e.target.value })} />
+          <input required type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} placeholder="Phone Number" className="input" value={staffForm.phone} onChange={(e) => setStaffForm({ ...staffForm, phone: sanitizePhoneInput(e.target.value) })} />
           <input type="email" placeholder="Email (optional)" className="input" value={staffForm.email} onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} />
           <div>
             <input required type="password" placeholder="Password" className="input" value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} />
@@ -89,7 +89,7 @@ export default function CustomersPage() {
       {/* Desktop table */}
       <div className="card hidden overflow-x-auto md:block">
         <table className="table-base">
-          <thead><tr><th>Name</th><th>Phone</th><th>Role</th><th>Loyalty Points</th><th>Joined</th></tr></thead>
+          <thead><tr><th>Name</th><th>Phone</th><th>Role</th><th>GlowPoints</th><th>Joined</th></tr></thead>
           <tbody>
             {result?.items.map((u) => (
               <tr key={u.id}>
@@ -114,7 +114,7 @@ export default function CustomersPage() {
             </div>
             <p className="mt-1 text-sm text-slate-500">{u.phone ?? u.email}</p>
             <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
-              <span>{u.loyaltyPoints} loyalty pts</span>
+              <span>{u.loyaltyPoints} GlowPoints</span>
               <span>Joined {new Date(u.createdAt).toLocaleDateString()}</span>
             </div>
           </Link>

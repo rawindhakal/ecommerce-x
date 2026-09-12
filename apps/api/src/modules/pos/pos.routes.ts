@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { PHONE_REGEX, PHONE_VALIDATION_MESSAGE } from "@ecommerce-x/shared";
 import { prisma } from "@ecommerce-x/db";
 import { asyncHandler } from "../../middleware/async-handler.js";
 import { requireAuth, requireRole, POS_ROLES } from "../../middleware/auth.js";
@@ -7,6 +8,7 @@ import { HttpError } from "../../lib/http-error.js";
 import { deductStockAcrossLocations, getAvailableStock, getTheLocationId } from "../inventory/inventory.service.js";
 import { generateOrderNumber } from "../orders/orders.service.js";
 import { earnPointsForOrder, redeemPointsForOrder, maxRedeemablePoints, getLoyaltyRule } from "../loyalty/loyalty.service.js";
+import { chargeCredit } from "../credit/credit.service.js";
 
 export const posRouter = Router();
 posRouter.use(requireAuth, requireRole(...POS_ROLES));
@@ -18,7 +20,7 @@ posRouter.get(
     const code = req.params.code as string;
     const variant = await prisma.productVariant.findFirst({
       where: { OR: [{ barcode: code }, { sku: code }], isActive: true },
-      include: { product: { include: { images: { take: 1 }, taxRate: true } }, inventory: true },
+      include: { product: { include: { images: { take: 1 } } }, inventory: true },
     });
     if (!variant) throw HttpError.notFound("Product not found for this barcode/SKU");
     res.json(variant);
@@ -46,7 +48,7 @@ posRouter.get(
             }
           : {}),
       },
-      include: { product: { include: { images: { take: 1, orderBy: { sortOrder: "asc" } }, taxRate: true } }, inventory: true },
+      include: { product: { include: { images: { take: 1, orderBy: { sortOrder: "asc" } } } }, inventory: true },
       take: q.length >= 2 ? 25 : 40,
       orderBy: { product: { name: "asc" } },
     });
@@ -62,7 +64,7 @@ posRouter.get(
     if (phone.length < 3) return res.json([]);
     const customers = await prisma.user.findMany({
       where: { role: "CUSTOMER", phone: { contains: phone } },
-      select: { id: true, firstName: true, lastName: true, phone: true, email: true, loyaltyPoints: true },
+      select: { id: true, firstName: true, lastName: true, phone: true, email: true, loyaltyPoints: true, creditLimit: true, creditBalance: true },
       take: 10,
     });
     res.json(customers);
@@ -72,7 +74,7 @@ posRouter.get(
 const createCustomerSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().optional(),
-  phone: z.string().min(6),
+  phone: z.string().regex(PHONE_REGEX, PHONE_VALIDATION_MESSAGE),
 });
 
 posRouter.post(
@@ -84,7 +86,7 @@ posRouter.post(
 
     const customer = await prisma.user.create({
       data: { firstName: data.firstName, lastName: data.lastName, phone: data.phone, role: "CUSTOMER" },
-      select: { id: true, firstName: true, lastName: true, phone: true, email: true, loyaltyPoints: true },
+      select: { id: true, firstName: true, lastName: true, phone: true, email: true, loyaltyPoints: true, creditLimit: true, creditBalance: true },
     });
     res.status(201).json(customer);
   })
@@ -179,8 +181,11 @@ const saleSchema = z.object({
   items: z.array(saleItemSchema).min(1),
   customerId: z.string().optional(),
   customerName: z.string().default("Walk-in Customer"),
-  customerPhone: z.string().optional(),
-  paymentMethod: z.enum(["CASH", "CARD_POS", "FONEPAY", "ESEWA"]),
+  customerPhone: z.string().regex(PHONE_REGEX, PHONE_VALIDATION_MESSAGE).optional().or(z.literal("")),
+  // STORE_CREDIT is deliberately only accepted here, on the POS sale route —
+  // the online checkout's gateway type has no such option, so a credit sale
+  // can only ever be created in person.
+  paymentMethod: z.enum(["CASH", "CARD_POS", "FONEPAY", "ESEWA", "STORE_CREDIT"]),
   amountTendered: z.number().optional(),
   discountTotal: z.number().nonnegative().default(0),
   redeemPoints: z.number().int().nonnegative().optional(),
@@ -190,11 +195,14 @@ posRouter.post(
   "/sale",
   asyncHandler(async (req, res) => {
     const data = saleSchema.parse(req.body);
+    if (data.paymentMethod === "STORE_CREDIT" && !data.customerId) {
+      throw HttpError.badRequest("Store credit sales require a registered customer — select or create one first.");
+    }
     const locationId = await getTheLocationId();
 
     const variants = await prisma.productVariant.findMany({
       where: { id: { in: data.items.map((i) => i.variantId) } },
-      include: { product: { include: { taxRate: true } } },
+      include: { product: true },
     });
     const variantMap = new Map(variants.map((v) => [v.id, v]));
 
@@ -213,13 +221,8 @@ posRouter.post(
       return sum + Number(v.price) * item.quantity;
     }, 0);
 
-    // Same tax logic as the online checkout: each item is taxed at its
-    // product's configured rate (or 0 if not taxable / no rate set).
-    const taxTotal = data.items.reduce((sum, item) => {
-      const v = variantMap.get(item.variantId)!;
-      const rate = v.product.taxable ? Number(v.product.taxRate?.rate ?? 0) : 0;
-      return sum + (Number(v.price) * item.quantity * rate) / 100;
-    }, 0);
+    // VAT/tax is disabled for now — every POS sale carries a 0 taxTotal.
+    const taxTotal = 0;
 
     let loyaltyDiscount = 0;
     if (data.customerId && data.redeemPoints) {
@@ -270,6 +273,10 @@ posRouter.post(
           },
           statusHistory: { create: { status: "COMPLETED", note: "POS sale" } },
           payments: {
+            // A STORE_CREDIT "payment" is recorded as PAID from the sale's
+            // point of view (goods left the store, revenue is recognized) —
+            // the actual owed amount lives in the customer's credit ledger,
+            // charged just below.
             create: {
               gateway: data.paymentMethod,
               status: "PAID",
@@ -287,6 +294,10 @@ posRouter.post(
           { variantId: item.variantId, quantity: item.quantity, reason: "POS_SALE", reference: orderNumber, performedById: req.user!.id },
           tx
         );
+      }
+
+      if (data.paymentMethod === "STORE_CREDIT") {
+        await chargeCredit(tx, data.customerId!, created.id, total);
       }
 
       let pointsEarned = 0;

@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Upload } from "lucide-react";
-import { api, uploadFile, API_URL } from "@/lib/api";
+import { Plus, Trash2, Upload, Sparkles } from "lucide-react";
+import { api, uploadFile, generateImage, API_URL } from "@/lib/api";
+import { SuccessModal } from "@/components/success-modal";
 
 interface Category { id: string; name: string }
 interface Brand { id: string; name: string }
-interface TaxRate { id: string; name: string; rate: string }
 
 interface VariantForm {
   id?: string;
@@ -35,7 +35,6 @@ export interface ProductFormData {
   brandId: string;
   basePrice: string;
   compareAtPrice: string;
-  taxRateId: string;
   isFeatured: boolean;
   tags: string;
   seoTitle: string;
@@ -62,9 +61,11 @@ export function ProductForm({ initial }: { initial?: any }) {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
-  const [taxRates, setTaxRates] = useState<TaxRate[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createdName, setCreatedName] = useState<string | null>(null);
+  const [generatingImage, setGeneratingImage] = useState(false);
+  const [genImageError, setGenImageError] = useState<string | null>(null);
 
   const [form, setForm] = useState<ProductFormData>(() => ({
     id: initial?.id,
@@ -77,7 +78,6 @@ export function ProductForm({ initial }: { initial?: any }) {
     brandId: initial?.brandId ?? "",
     basePrice: initial?.basePrice ?? "",
     compareAtPrice: initial?.compareAtPrice ?? "",
-    taxRateId: initial?.taxRateId ?? "",
     isFeatured: initial?.isFeatured ?? false,
     tags: initial?.tags?.join(", ") ?? "",
     seoTitle: initial?.seoTitle ?? "",
@@ -92,7 +92,6 @@ export function ProductForm({ initial }: { initial?: any }) {
   useEffect(() => {
     api.get<Category[]>("/api/categories?includeInactive=true").then(setCategories);
     api.get<Brand[]>("/api/brands?includeInactive=true").then(setBrands);
-    api.get<TaxRate[]>("/api/tax").then(setTaxRates);
   }, []);
 
   function updateVariant(idx: number, patch: Partial<VariantForm>) {
@@ -114,6 +113,24 @@ export function ProductForm({ initial }: { initial?: any }) {
     setForm((f) => ({ ...f, images: [...f.images, { url, altText: f.name }] }));
   }
 
+  async function handleGenerateImage() {
+    if (!form.name.trim()) {
+      setGenImageError("Enter a product name first — it's used to generate the image.");
+      return;
+    }
+    setGeneratingImage(true);
+    setGenImageError(null);
+    try {
+      const prompt = `A clean, modern e-commerce product photo of "${form.name}"${form.shortDescription ? ` — ${form.shortDescription}` : ""}, centered on a plain white studio background, soft even lighting, no text or watermarks.`;
+      const url = await generateImage(prompt);
+      setForm((f) => ({ ...f, images: [...f.images, { url, altText: f.name }] }));
+    } catch (err: any) {
+      setGenImageError(err.message ?? "Image generation failed");
+    } finally {
+      setGeneratingImage(false);
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -130,7 +147,6 @@ export function ProductForm({ initial }: { initial?: any }) {
         brandId: form.brandId || null,
         basePrice: Number(form.basePrice),
         compareAtPrice: form.compareAtPrice ? Number(form.compareAtPrice) : undefined,
-        taxRateId: form.taxRateId || null,
         isFeatured: form.isFeatured,
         tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
         seoTitle: form.seoTitle || undefined,
@@ -147,6 +163,7 @@ export function ProductForm({ initial }: { initial?: any }) {
       };
 
       let productId = form.id;
+      const isCreate = !form.id;
       if (form.id) {
         await api.put(`/api/products/${form.id}`, payload);
       } else {
@@ -167,8 +184,12 @@ export function ProductForm({ initial }: { initial?: any }) {
         }
       }
 
-      router.push(`/products/${productId}`);
-      router.refresh();
+      if (isCreate) {
+        setCreatedName(form.name);
+      } else {
+        router.push(`/products/${productId}`);
+        router.refresh();
+      }
     } catch (err: any) {
       setError(err.message ?? "Failed to save product");
     } finally {
@@ -208,13 +229,6 @@ export function ProductForm({ initial }: { initial?: any }) {
           <input type="number" step="0.01" className="input" value={form.compareAtPrice} onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })} />
         </div>
         <div>
-          <label className="label">Tax Rate</label>
-          <select className="input" value={form.taxRateId} onChange={(e) => setForm({ ...form, taxRateId: e.target.value })}>
-            <option value="">None</option>
-            {taxRates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.rate}%)</option>)}
-          </select>
-        </div>
-        <div>
           <label className="label">Status</label>
           <select className="input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
             <option value="DRAFT">Draft</option>
@@ -248,7 +262,17 @@ export function ProductForm({ initial }: { initial?: any }) {
             <span className="text-xs">Upload</span>
             <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
           </label>
+          <button
+            type="button"
+            onClick={handleGenerateImage}
+            disabled={generatingImage}
+            className="flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 text-slate-400 hover:border-brand-400 hover:text-brand-500 disabled:cursor-wait disabled:opacity-60"
+          >
+            <Sparkles size={18} className={generatingImage ? "animate-pulse" : ""} />
+            <span className="text-xs">{generatingImage ? "Generating…" : "Generate with AI"}</span>
+          </button>
         </div>
+        {genImageError && <p className="mt-2 text-xs text-red-600">{genImageError}</p>}
       </div>
 
       <div className="card p-5">
@@ -291,6 +315,14 @@ export function ProductForm({ initial }: { initial?: any }) {
       </div>
 
       <button type="submit" disabled={saving} className="btn-primary">{saving ? "Saving…" : "Save Product"}</button>
+
+      <SuccessModal
+        open={createdName !== null}
+        title="Product created"
+        message={createdName ? `"${createdName}" has been added to your catalog.` : undefined}
+        actionLabel="Back to Products"
+        onClose={() => router.push("/products")}
+      />
     </form>
   );
 }

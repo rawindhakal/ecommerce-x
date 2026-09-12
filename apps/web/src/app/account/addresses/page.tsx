@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { NEPAL_PROVINCES } from "@ecommerce-x/shared";
+import { NEPAL_PROVINCES, sanitizePhoneInput } from "@ecommerce-x/shared";
 
 interface Address {
   id: string;
@@ -56,7 +56,7 @@ export default function AddressesPage() {
         <form onSubmit={submit} className="card mt-4 grid grid-cols-1 gap-3 p-5 sm:grid-cols-2">
           <input className="input" placeholder="Label (Home, Office)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
           <input className="input" required placeholder="Full Name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
-          <input className="input" required placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} className="input" required placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: sanitizePhoneInput(e.target.value) })} />
           <select className="input" value={form.province} onChange={(e) => setForm({ ...form, province: e.target.value })}>
             {NEPAL_PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>

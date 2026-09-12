@@ -59,16 +59,8 @@ export async function createOrderFromCart(input: CheckoutInput) {
   const district = (input.shippingAddress?.district as string) ?? undefined;
   const shippingTotal = await getShippingFee(district, subtotal);
 
-  const taxRates = await prisma.product.findMany({
-    where: { id: { in: cart.items.map((i) => i.productId) } },
-    select: { id: true, taxable: true, taxRate: { select: { rate: true } } },
-  });
-  const taxByProduct = new Map(taxRates.map((p) => [p.id, p.taxable ? Number(p.taxRate?.rate ?? 0) : 0]));
-  const taxTotal = cart.items.reduce((sum, item) => {
-    const rate = taxByProduct.get(item.productId) ?? 0;
-    const lineTotal = Number(item.variant.price) * item.quantity;
-    return sum + (lineTotal * rate) / 100;
-  }, 0);
+  // VAT/tax is disabled for now — every order carries a 0 taxTotal.
+  const taxTotal = 0;
 
   let loyaltyDiscount = 0;
   let pointsToRedeem = 0;

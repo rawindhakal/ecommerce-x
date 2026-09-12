@@ -23,7 +23,6 @@ export interface ReceiptData {
   items: ReceiptLineItem[];
   subtotal: number;
   discountTotal: number;
-  taxTotal?: number;
   total: number;
   paymentMethod?: string;
   amountTendered?: number;
@@ -75,7 +74,6 @@ export function Receipt80mm({ data }: { data: ReceiptData | null }) {
 
       <div className="flex justify-between"><span>Subtotal</span><span>{formatNpr(data.subtotal)}</span></div>
       {data.discountTotal > 0 && <div className="flex justify-between"><span>Discount</span><span>-{formatNpr(data.discountTotal)}</span></div>}
-      {!!data.taxTotal && <div className="flex justify-between"><span>Tax</span><span>{formatNpr(data.taxTotal)}</span></div>}
       <div className="mt-1 flex justify-between text-sm font-bold"><span>TOTAL</span><span>{formatNpr(data.total)}</span></div>
 
       {data.mode === "final" && (
@@ -86,7 +84,7 @@ export function Receipt80mm({ data }: { data: ReceiptData | null }) {
           {typeof data.change === "number" && <div className="flex justify-between"><span>Change</span><span>{formatNpr(data.change)}</span></div>}
           {!!data.loyaltyPointsEarned && (
             <div className="mt-1 flex justify-between">
-              <span>Points Earned</span>
+              <span>GlowPoints Earned</span>
               <span>+{data.loyaltyPointsEarned}{typeof data.customerLoyaltyBalance === "number" ? ` (bal: ${data.customerLoyaltyBalance})` : ""}</span>
             </div>
           )}

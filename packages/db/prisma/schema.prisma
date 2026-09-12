@@ -80,6 +80,16 @@ enum PaymentGatewayType {
   COD
   CASH
   CARD_POS
+  // A charge against the customer's in-store credit account instead of an
+  // immediate payment. Only ever created by the POS sale flow — the online
+  // checkout's gateway type deliberately has no STORE_CREDIT option.
+  STORE_CREDIT
+}
+
+enum CreditTxnType {
+  CHARGE // a POS credit sale — increases the balance owed
+  PAYMENT // the customer paying down their balance — decreases it
+  ADJUSTMENT // manual correction by an admin, can go either way
 }
 
 enum FulfillmentStatus {
@@ -142,6 +152,12 @@ model User {
   emailVerifiedAt   DateTime?
   phoneVerifiedAt   DateTime?
   loyaltyPoints     Int       @default(0)
+  // In-store credit account ("tab"). creditBalance is what the customer
+  // currently owes the store; it can never exceed creditLimit — enforced
+  // in the POS credit-sale handler, not just here. Both default to 0, so
+  // a customer has no credit facility until an admin explicitly sets a limit.
+  creditLimit       Decimal   @default(0) @db.Decimal(12, 2)
+  creditBalance     Decimal   @default(0) @db.Decimal(12, 2)
   avatarUrl         String?
   lastLoginAt       DateTime?
   // Per-account brute-force lockout — separate from the IP-based rate
@@ -158,6 +174,7 @@ model User {
   wishlist          WishlistItem[]
   reviews           Review[]
   loyaltyTxns       LoyaltyTransaction[]
+  creditTxns        CreditTransaction[]
   refreshTokens     RefreshToken[]
   posSessions       PosSession[]
   auditLogs         AuditLog[]
@@ -506,6 +523,7 @@ model Order {
   payments            Payment[]
   statusHistory       OrderStatusHistory[]
   loyaltyTxns         LoyaltyTransaction[]
+  creditTxns          CreditTransaction[]
 
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
@@ -660,6 +678,24 @@ model LoyaltyTransaction {
 
   @@index([userId])
   @@map("loyalty_transactions")
+}
+
+// In-store customer credit ("tab") ledger. Every change to User.creditBalance
+// is recorded here so the running balance is always reconstructable and
+// auditable, the same pattern LoyaltyTransaction uses for points.
+model CreditTransaction {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId   String?
+  order     Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  type      CreditTxnType
+  amount    Decimal       @db.Decimal(12, 2) // signed delta: positive increases balance owed, negative decreases it
+  note      String?
+  createdAt DateTime      @default(now())
+
+  @@index([userId])
+  @@map("credit_transactions")
 }
 
 // =========================================================================

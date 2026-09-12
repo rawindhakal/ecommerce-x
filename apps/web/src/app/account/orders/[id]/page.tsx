@@ -10,7 +10,6 @@ interface OrderDetail {
   paymentStatus: string;
   subtotal: string;
   discountTotal: string;
-  taxTotal: string;
   shippingTotal: string;
   total: string;
   shippingAddress: Record<string, string> | null;
@@ -48,7 +47,6 @@ export default function OrderDetailPage(props: { params: Promise<{ id: string }>
         <div className="mt-4 space-y-1 border-t border-ink/10 pt-3 text-sm">
           <div className="flex justify-between text-ink/60"><span>Subtotal</span><span>{formatNpr(order.subtotal)}</span></div>
           <div className="flex justify-between text-ink/60"><span>Shipping</span><span>{formatNpr(order.shippingTotal)}</span></div>
-          <div className="flex justify-between text-ink/60"><span>Tax</span><span>{formatNpr(order.taxTotal)}</span></div>
           <div className="flex justify-between font-semibold"><span>Total</span><span>{formatNpr(order.total)}</span></div>
         </div>
       </div>

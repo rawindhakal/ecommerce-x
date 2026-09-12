@@ -48,7 +48,7 @@ reportsRouter.get(
     const [current, previous, unitsAgg] = await Promise.all([
       prisma.order.aggregate({
         where: orderWhere(from, to, channel),
-        _sum: { total: true, discountTotal: true, taxTotal: true, shippingTotal: true },
+        _sum: { total: true, discountTotal: true, shippingTotal: true },
         _count: true,
       }),
       prisma.order.aggregate({
@@ -76,7 +76,6 @@ reportsRouter.get(
       avgOrderValue: orders > 0 ? revenue / orders : 0,
       unitsSold: unitsAgg._sum.quantity ?? 0,
       discountTotal: Number(current._sum.discountTotal ?? 0),
-      taxTotal: Number(current._sum.taxTotal ?? 0),
       shippingTotal: Number(current._sum.shippingTotal ?? 0),
     });
   })
@@ -241,6 +240,79 @@ reportsRouter.get(
       .map((r) => ({ product: r.variant.product.name, sku: r.variant.sku, location: r.location.name, quantityOnHand: r.quantityOnHand, reorderPoint: r.reorderPoint }));
 
     res.json({ stockValue, totalUnits, lowStockCount: lowStock.length, lowStock });
+  })
+);
+
+/**
+ * Z-Report: a single calendar day's full "close the books" summary across
+ * every channel — total sales, distinct customers and their spend, item-wise
+ * units sold, and a breakdown by sales channel and payment method. Named
+ * after the classic cash-register "Z reading" that resets the day's totals.
+ */
+reportsRouter.get(
+  "/z-report",
+  asyncHandler(async (req, res) => {
+    const dateStr = req.query.date ? String(req.query.date).slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const from = new Date(`${dateStr}T00:00:00.000Z`);
+    const to = new Date(`${dateStr}T23:59:59.999Z`);
+    const where = orderWhere(from, to);
+
+    const [orders, items, byChannelRaw, byMethodRaw] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        select: {
+          id: true,
+          orderNumber: true,
+          userId: true,
+          customerName: true,
+          customerPhone: true,
+          customerEmail: true,
+          channel: true,
+          total: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.orderItem.groupBy({
+        by: ["productId", "name"],
+        where: { order: where },
+        _sum: { quantity: true, total: true },
+        orderBy: { _sum: { quantity: "desc" } },
+      }),
+      prisma.order.groupBy({ by: ["channel"], where, _sum: { total: true }, _count: true }),
+      prisma.payment.groupBy({
+        by: ["gateway"],
+        where: { status: "PAID", createdAt: { gte: from, lte: to } },
+        _sum: { amount: true },
+        _count: true,
+      }),
+    ]);
+
+    const totalSales = orders.reduce((sum, o) => sum + Number(o.total), 0);
+
+    const customerMap = new Map<string, { key: string; name: string; phone: string | null; email: string | null; isGuest: boolean; orders: number; amountSpent: number }>();
+    for (const o of orders) {
+      const key = o.userId ?? o.customerPhone ?? o.customerName;
+      const entry = customerMap.get(key) ?? { key, name: o.customerName, phone: o.customerPhone, email: o.customerEmail, isGuest: !o.userId, orders: 0, amountSpent: 0 };
+      entry.orders += 1;
+      entry.amountSpent += Number(o.total);
+      customerMap.set(key, entry);
+    }
+    const customers = Array.from(customerMap.values()).sort((a, b) => b.amountSpent - a.amountSpent);
+
+    res.json({
+      date: dateStr,
+      totalSales,
+      orderCount: orders.length,
+      customerCount: customerMap.size,
+      unitsSold: items.reduce((sum, i) => sum + (i._sum.quantity ?? 0), 0),
+      firstOrderAt: orders[0]?.createdAt ?? null,
+      lastOrderAt: orders[orders.length - 1]?.createdAt ?? null,
+      byChannel: byChannelRaw.map((c) => ({ channel: c.channel, revenue: Number(c._sum.total ?? 0), orders: c._count })),
+      byPaymentMethod: byMethodRaw.map((m) => ({ gateway: m.gateway, revenue: Number(m._sum.amount ?? 0), count: m._count })).sort((a, b) => b.revenue - a.revenue),
+      itemsSold: items.map((i) => ({ productId: i.productId, name: i.name, quantitySold: i._sum.quantity ?? 0, revenue: Number(i._sum.total ?? 0) })),
+      customers,
+    });
   })
 );
 

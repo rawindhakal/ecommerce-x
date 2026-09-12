@@ -29,7 +29,7 @@ export default function AccountOverview() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="card p-5">
-          <p className="text-sm text-ink/50">Loyalty Points</p>
+          <p className="text-sm text-ink/50">GlowPoints</p>
           <p className="mt-1 text-2xl font-semibold">{user?.loyaltyPoints ?? 0}</p>
           <Link href="/account/loyalty" className="mt-2 inline-block text-xs text-brand">View details</Link>
         </div>

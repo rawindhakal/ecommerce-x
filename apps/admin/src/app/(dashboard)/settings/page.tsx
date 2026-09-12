@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api, uploadFile, API_URL } from "@/lib/api";
 
-type Tab = "branding" | "payments" | "integrations" | "seo" | "shipping" | "tax" | "loyalty";
+type Tab = "branding" | "payments" | "integrations" | "seo" | "shipping" | "loyalty";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "branding", label: "Branding & Contact" },
@@ -11,8 +11,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "integrations", label: "Integrations" },
   { key: "seo", label: "SEO Defaults" },
   { key: "shipping", label: "Shipping" },
-  { key: "tax", label: "Tax" },
-  { key: "loyalty", label: "Loyalty Program" },
+  { key: "loyalty", label: "GlowPoints Program" },
 ];
 
 export default function SettingsPage() {
@@ -56,7 +55,6 @@ export default function SettingsPage() {
       {tab === "integrations" && <IntegrationsTab settings={settings} onSave={saveGroup} />}
       {tab === "seo" && <SeoTab settings={settings} onSave={saveGroup} />}
       {tab === "shipping" && <ShippingTab />}
-      {tab === "tax" && <TaxTab />}
       {tab === "loyalty" && <LoyaltyTab />}
     </div>
   );
@@ -307,39 +305,6 @@ function ShippingTab() {
   );
 }
 
-function TaxTab() {
-  const [rates, setRates] = useState<any[]>([]);
-  const [form, setForm] = useState({ name: "", rate: "" });
-
-  async function load() { setRates(await api.get("/api/tax")); }
-  useEffect(() => { load(); }, []);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    await api.post("/api/tax", { name: form.name, rate: Number(form.rate) });
-    setForm({ name: "", rate: "" });
-    load();
-  }
-
-  return (
-    <div className="space-y-6">
-      <form onSubmit={submit} className="card flex gap-3 p-5">
-        <input required placeholder="Tax name (VAT)" className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        <input required type="number" step="0.01" placeholder="Rate %" className="input" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
-        <button type="submit" className="btn-primary whitespace-nowrap">Add Tax Rate</button>
-      </form>
-      <div className="card overflow-x-auto">
-        <table className="table-base">
-          <thead><tr><th>Name</th><th>Rate</th><th>Default</th></tr></thead>
-          <tbody>
-            {rates.map((r) => <tr key={r.id}><td>{r.name}</td><td>{r.rate}%</td><td>{r.isDefault ? "Yes" : ""}</td></tr>)}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 function LoyaltyTab() {
   const [form, setForm] = useState<any>(null);
 
@@ -362,13 +327,13 @@ function LoyaltyTab() {
 
   return (
     <div className="card grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
-      <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} /> Loyalty program active</label>
-      <div><label className="label">Points earned per NPR spent</label><input type="number" step="0.001" className="input" value={form.earnPointsPerNpr} onChange={(e) => setForm({ ...form, earnPointsPerNpr: e.target.value })} /></div>
-      <div><label className="label">NPR value per point redeemed</label><input type="number" step="0.01" className="input" value={form.redeemPointValue} onChange={(e) => setForm({ ...form, redeemPointValue: e.target.value })} /></div>
-      <div><label className="label">Minimum points to redeem</label><input type="number" className="input" value={form.minRedeemPoints} onChange={(e) => setForm({ ...form, minRedeemPoints: e.target.value })} /></div>
-      <div><label className="label">Max % of order payable with points</label><input type="number" className="input" value={form.maxRedeemPercent} onChange={(e) => setForm({ ...form, maxRedeemPercent: e.target.value })} /></div>
-      <div><label className="label">Points expire after (days, blank = never)</label><input type="number" className="input" value={form.pointsExpireDays ?? ""} onChange={(e) => setForm({ ...form, pointsExpireDays: e.target.value })} /></div>
-      <button className="btn-primary w-fit sm:col-span-2" onClick={save}>Save Loyalty Rules</button>
+      <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} /> GlowPoints program active</label>
+      <div><label className="label">GlowPoints earned per NPR spent</label><input type="number" step="0.001" className="input" value={form.earnPointsPerNpr} onChange={(e) => setForm({ ...form, earnPointsPerNpr: e.target.value })} /></div>
+      <div><label className="label">NPR value per GlowPoint redeemed</label><input type="number" step="0.01" className="input" value={form.redeemPointValue} onChange={(e) => setForm({ ...form, redeemPointValue: e.target.value })} /></div>
+      <div><label className="label">Minimum GlowPoints to redeem</label><input type="number" className="input" value={form.minRedeemPoints} onChange={(e) => setForm({ ...form, minRedeemPoints: e.target.value })} /></div>
+      <div><label className="label">Max % of order payable with GlowPoints</label><input type="number" className="input" value={form.maxRedeemPercent} onChange={(e) => setForm({ ...form, maxRedeemPercent: e.target.value })} /></div>
+      <div><label className="label">GlowPoints expire after (days, blank = never)</label><input type="number" className="input" value={form.pointsExpireDays ?? ""} onChange={(e) => setForm({ ...form, pointsExpireDays: e.target.value })} /></div>
+      <button className="btn-primary w-fit sm:col-span-2" onClick={save}>Save GlowPoints Rules</button>
     </div>
   );
 }

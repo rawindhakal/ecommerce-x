@@ -4,6 +4,7 @@ import { prisma } from "@ecommerce-x/db";
 import { asyncHandler } from "../../middleware/async-handler.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { HttpError } from "../../lib/http-error.js";
+import { PHONE_REGEX, PHONE_VALIDATION_MESSAGE } from "@ecommerce-x/shared";
 
 export const addressesRouter = Router();
 addressesRouter.use(requireAuth);
@@ -18,7 +19,7 @@ addressesRouter.get(
 const addressSchema = z.object({
   label: z.string().optional(),
   fullName: z.string().min(1),
-  phone: z.string().min(6),
+  phone: z.string().regex(PHONE_REGEX, PHONE_VALIDATION_MESSAGE),
   province: z.string().min(1),
   district: z.string().min(1),
   municipality: z.string().min(1),

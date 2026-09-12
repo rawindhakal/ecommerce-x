@@ -28,13 +28,15 @@ import { usersRouter } from "./modules/users/users.routes.js";
 import { addressesRouter } from "./modules/customers/addresses.routes.js";
 import { wishlistRouter } from "./modules/customers/wishlist.routes.js";
 import { couponsRouter } from "./modules/coupons/coupons.routes.js";
-import { shippingRouter, taxRouter } from "./modules/shipping/shipping.routes.js";
+import { shippingRouter } from "./modules/shipping/shipping.routes.js";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
 import { reportsRouter } from "./modules/reports/reports.routes.js";
 import { redirectsRouter } from "./modules/seo/redirects.routes.js";
 import { seoAuditRouter } from "./modules/seo/audit.routes.js";
 import { backupRouter } from "./modules/backup/backup.routes.js";
 import { auditRouter } from "./modules/audit/audit.routes.js";
+import { beautyRouter } from "./modules/beauty/beauty.routes.js";
+import { creditRouter } from "./modules/credit/credit.routes.js";
 
 export function createApp() {
   const app = express();
@@ -86,13 +88,15 @@ export function createApp() {
   app.use("/api/wishlist", wishlistRouter);
   app.use("/api/coupons", couponsRouter);
   app.use("/api/shipping", shippingRouter);
-  app.use("/api/tax", taxRouter);
+  // VAT/tax is disabled for now — the tax settings/rates API is intentionally not mounted.
   app.use("/api/dashboard", dashboardRouter);
   app.use("/api/reports", reportsRouter);
   app.use("/api/redirects", redirectsRouter);
   app.use("/api/seo-audit", seoAuditRouter);
   app.use("/api/backup", backupRouter);
   app.use("/api/audit-log", auditRouter);
+  app.use("/api/beauty", beautyRouter);
+  app.use("/api/credit", creditRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

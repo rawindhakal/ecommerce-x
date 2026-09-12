@@ -7,6 +7,7 @@ import { getPagination, paginate } from "../../lib/pagination.js";
 import { hashPassword, passwordSchema } from "../../lib/password.js";
 import { HttpError } from "../../lib/http-error.js";
 import { logAudit } from "../../lib/audit-log.js";
+import { PHONE_REGEX, PHONE_VALIDATION_MESSAGE } from "@ecommerce-x/shared";
 
 export const usersRouter = Router();
 usersRouter.use(requireAuth, requireRole(...ADMIN_ROLES));
@@ -43,7 +44,7 @@ usersRouter.get(
 );
 
 const createStaffSchema = z.object({
-  phone: z.string().trim().min(7, "Enter a valid phone number").max(20),
+  phone: z.string().trim().regex(PHONE_REGEX, PHONE_VALIDATION_MESSAGE),
   email: z.string().email().optional().or(z.literal("")),
   password: passwordSchema,
   firstName: z.string().min(1),
@@ -62,8 +63,9 @@ usersRouter.post(
     }
     const existing = await prisma.user.findUnique({ where: { phone: data.phone } });
     if (existing) throw HttpError.conflict("A user with this phone number already exists");
+    const { password, ...rest } = data;
     const user = await prisma.user.create({
-      data: { ...data, email: data.email || undefined, passwordHash: await hashPassword(data.password), emailVerifiedAt: data.email ? new Date() : undefined },
+      data: { ...rest, email: data.email || undefined, passwordHash: await hashPassword(password), emailVerifiedAt: data.email ? new Date() : undefined },
       select,
     });
     await logAudit({ userId: req.user!.id, action: "user.staff_created", entityType: "User", entityId: user.id, metadata: { role: user.role, phone: user.phone }, ipAddress: req.ip });
@@ -74,7 +76,7 @@ usersRouter.post(
 const updateUserSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
-  phone: z.string().optional(),
+  phone: z.string().regex(PHONE_REGEX, PHONE_VALIDATION_MESSAGE).optional(),
   role: z.enum(["SUPERADMIN", "ADMIN", "STAFF", "POS_CASHIER", "CUSTOMER"]).optional(),
   isActive: z.boolean().optional(),
 });

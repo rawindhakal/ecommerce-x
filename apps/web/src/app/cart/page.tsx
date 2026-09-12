@@ -102,7 +102,7 @@ export default function CartPage() {
                 <span>Estimated Total</span>
                 <span>{formatNpr(cart.totals.total)}</span>
               </div>
-              <p className="text-xs text-ink/40">Shipping & tax calculated at checkout</p>
+              <p className="text-xs text-ink/40">Shipping calculated at checkout</p>
             </div>
 
             <Link href="/checkout" className="btn-primary mt-5 w-full">Proceed to Checkout</Link>

@@ -13,30 +13,45 @@ html {
   scroll-behavior: smooth;
 }
 
-body {
-  @apply bg-cream text-ink antialiased;
+/* These custom classes must live in the "components" layer, not as bare
+   top-level rules — otherwise PostCSS emits them textually after the
+   `@tailwind utilities` output (since they're written below it in this
+   file), which makes them win the cascade over utility overrides like
+   `w-auto`/`w-fit` combined on the same element (e.g. `className="input
+   w-auto"` would stay full-width instead of shrinking). @layer reorders
+   them into the components layer regardless of source position, so
+   utilities correctly override them again. */
+@layer components {
+  body {
+    @apply bg-cream text-ink antialiased;
+  }
+
+  .container-x {
+    @apply mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-ink/20 bg-white px-6 py-3 text-sm font-semibold text-ink transition hover:border-ink/40 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-ink/15 bg-white px-4 py-2.5 text-sm text-ink placeholder:text-ink/40 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20;
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink/60;
+  }
+
+  .card {
+    @apply rounded-2xl border border-ink/5 bg-white shadow-card;
+  }
 }
 
-.container-x {
-  @apply mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8;
-}
-
-.btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50;
-}
-
-.btn-outline {
-  @apply inline-flex items-center justify-center gap-2 rounded-full border border-ink/20 bg-white px-6 py-3 text-sm font-semibold text-ink transition hover:border-ink/40 disabled:cursor-not-allowed disabled:opacity-50;
-}
-
-.input {
-  @apply w-full rounded-lg border border-ink/15 bg-white px-4 py-2.5 text-sm text-ink placeholder:text-ink/40 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20;
-}
-
-.label {
-  @apply mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink/60;
-}
-
-.card {
-  @apply rounded-2xl border border-ink/5 bg-white shadow-card;
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
