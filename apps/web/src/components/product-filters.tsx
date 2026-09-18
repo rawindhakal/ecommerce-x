@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
@@ -61,6 +62,96 @@ export function BrandFilter({ brands }: { brands: { id: string; name: string; sl
         ))}
       </div>
     </div>
+  );
+}
+
+/** Generic multi-select chip filter backed by a comma-separated query param — used for tags and each variant-option facet (shade, size, ...). */
+export function MultiChipFilter({ paramKey, label, options }: { paramKey: string; label: string; options: string[] }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const selected = new Set((params.get(paramKey) ?? "").split(",").filter(Boolean));
+  if (options.length === 0) return null;
+
+  function toggle(value: string) {
+    const next = new URLSearchParams(params.toString());
+    const nextSelected = new Set(selected);
+    if (nextSelected.has(value)) nextSelected.delete(value);
+    else nextSelected.add(value);
+    if (nextSelected.size === 0) next.delete(paramKey);
+    else next.set(paramKey, Array.from(nextSelected).join(","));
+    next.delete("page");
+    router.push(`${pathname}?${next.toString()}`);
+  }
+
+  return (
+    <div className="space-y-2">
+      <h4 className="text-sm font-semibold">{label}</h4>
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt) => (
+          <button
+            key={opt}
+            onClick={() => toggle(opt)}
+            className={`rounded-full border px-3 py-1.5 text-xs ${selected.has(opt) ? "border-brand bg-brand text-white" : "border-ink/15 text-ink/70"}`}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function PriceRangeFilter({ min, max }: { min: number; max: number }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const [values, setValues] = useState({
+    minPrice: params.get("minPrice") ?? String(min),
+    maxPrice: params.get("maxPrice") ?? String(max),
+  });
+
+  function apply(e: React.FormEvent) {
+    e.preventDefault();
+    const next = new URLSearchParams(params.toString());
+    const lo = Number(values.minPrice);
+    const hi = Number(values.maxPrice);
+    if (values.minPrice !== "" && lo > min) next.set("minPrice", String(lo));
+    else next.delete("minPrice");
+    if (values.maxPrice !== "" && hi < max) next.set("maxPrice", String(hi));
+    else next.delete("maxPrice");
+    next.delete("page");
+    router.push(`${pathname}?${next.toString()}`);
+  }
+
+  if (min >= max) return null;
+
+  return (
+    <form onSubmit={apply} className="space-y-2">
+      <h4 className="text-sm font-semibold">Price Range</h4>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min={min}
+          max={max}
+          className="input w-full px-2 py-1.5 text-xs"
+          value={values.minPrice}
+          onChange={(e) => setValues((v) => ({ ...v, minPrice: e.target.value }))}
+          aria-label="Minimum price"
+        />
+        <span className="text-ink/40">–</span>
+        <input
+          type="number"
+          min={min}
+          max={max}
+          className="input w-full px-2 py-1.5 text-xs"
+          value={values.maxPrice}
+          onChange={(e) => setValues((v) => ({ ...v, maxPrice: e.target.value }))}
+          aria-label="Maximum price"
+        />
+      </div>
+      <button type="submit" className="btn-outline w-full py-1.5 text-xs">Apply</button>
+    </form>
   );
 }
 

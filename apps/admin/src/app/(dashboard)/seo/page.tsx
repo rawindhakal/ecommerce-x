@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Plus, Trash2 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { Spinner } from "@/components/spinner";
+import { toast } from "@/lib/toast-store";
 
 interface Issue {
   id: string;
@@ -53,12 +55,21 @@ export default function SeoPage() {
   const [redirects, setRedirects] = useState<Redirect[]>([]);
   const [form, setForm] = useState(emptyRedirect);
   const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   async function loadAudit() {
-    setAudit(await api.get<AuditResult>("/api/seo-audit"));
+    try {
+      setAudit(await api.get<AuditResult>("/api/seo-audit"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load SEO audit.");
+    }
   }
   async function loadRedirects() {
-    setRedirects(await api.get<Redirect[]>("/api/redirects"));
+    try {
+      setRedirects(await api.get<Redirect[]>("/api/redirects"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load redirects.");
+    }
   }
   useEffect(() => {
     loadAudit();
@@ -67,21 +78,34 @@ export default function SeoPage() {
 
   async function submitRedirect(e: React.FormEvent) {
     e.preventDefault();
-    await api.post("/api/redirects", {
-      fromPath: form.fromPath,
-      toPath: form.statusCode === 410 ? null : form.toPath,
-      statusCode: Number(form.statusCode),
-      note: form.note || undefined,
-    });
-    setForm(emptyRedirect);
-    setShowForm(false);
-    loadRedirects();
+    setSaving(true);
+    try {
+      await api.post("/api/redirects", {
+        fromPath: form.fromPath,
+        toPath: form.statusCode === 410 ? null : form.toPath,
+        statusCode: Number(form.statusCode),
+        note: form.note || undefined,
+      });
+      toast.success("Redirect saved");
+      setForm(emptyRedirect);
+      setShowForm(false);
+      loadRedirects();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save redirect. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function removeRedirect(id: string) {
     if (!confirm("Delete this redirect?")) return;
-    await api.delete(`/api/redirects/${id}`);
-    loadRedirects();
+    try {
+      await api.delete(`/api/redirects/${id}`);
+      toast.success("Redirect deleted");
+      loadRedirects();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to delete redirect.");
+    }
   }
 
   const scoreColor = !audit ? "text-slate-400" : audit.score >= 90 ? "text-green-600" : audit.score >= 70 ? "text-amber-500" : "text-red-500";
@@ -161,17 +185,19 @@ export default function SeoPage() {
 
         {showForm && (
           <form onSubmit={submitRedirect} className="mb-5 grid grid-cols-1 gap-3 rounded-lg border border-slate-100 p-4 sm:grid-cols-4">
-            <input required placeholder="/products/old-slug" className="input" value={form.fromPath} onChange={(e) => setForm({ ...form, fromPath: e.target.value })} />
+            <input required placeholder="/products/old-slug *" className="input" value={form.fromPath} onChange={(e) => setForm({ ...form, fromPath: e.target.value })} />
             <select className="input" value={form.statusCode} onChange={(e) => setForm({ ...form, statusCode: Number(e.target.value) })}>
               <option value={301}>301 — Permanent redirect</option>
               <option value={302}>302 — Temporary redirect</option>
               <option value={410}>410 — Gone</option>
             </select>
             {form.statusCode !== 410 && (
-              <input required placeholder="/products/new-slug" className="input" value={form.toPath} onChange={(e) => setForm({ ...form, toPath: e.target.value })} />
+              <input required placeholder="/products/new-slug *" className="input" value={form.toPath} onChange={(e) => setForm({ ...form, toPath: e.target.value })} />
             )}
             <input placeholder="Note (optional)" className="input" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
-            <button type="submit" className="btn-primary sm:col-span-4">Save Redirect</button>
+            <button type="submit" disabled={saving} className="btn-primary sm:col-span-4">
+              {saving && <Spinner />} {saving ? "Saving…" : "Save Redirect"}
+            </button>
           </form>
         )}
 

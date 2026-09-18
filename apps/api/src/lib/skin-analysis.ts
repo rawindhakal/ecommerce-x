@@ -36,7 +36,8 @@ export type ConcernKey =
   | "DRYNESS"
   | "OILINESS"
   | "UNEVEN_TONE"
-  | "SENSITIVITY";
+  | "SENSITIVITY"
+  | "SUN_PROTECTION";
 
 export interface Answers {
   skinType: "OILY" | "DRY" | "COMBINATION" | "NORMAL" | "SENSITIVE" | "UNSURE";
@@ -53,6 +54,7 @@ export interface SkinMetrics {
   darkPatchRatio: number; // 0-1, share of notably darker-than-average skin pixels
   rednessIndex: number; // roughly -60..120
   textureRoughness: number; // 0+, mean local gradient magnitude
+  blemishRatio: number; // 0-1, share of skin pixels that are both notably redder than average AND texturally rough — localized inflamed spots, not overall complexion tone
   confident: boolean; // false when too little skin was detected in frame
 }
 
@@ -81,6 +83,7 @@ const CONCERN_LABELS: Record<ConcernKey, string> = {
   OILINESS: "Excess oil & shine",
   UNEVEN_TONE: "Uneven skin tone",
   SENSITIVITY: "Sensitivity & reactivity",
+  SUN_PROTECTION: "Sun damage & UV protection",
 };
 
 // ---- Step 1-2: decode + skin-pixel classification ----
@@ -168,6 +171,7 @@ async function computeMetrics(imageBuffer: Buffer): Promise<SkinMetrics> {
       darkPatchRatio: 0,
       rednessIndex: 0,
       textureRoughness: 15,
+      blemishRatio: 0,
       confident: false,
     };
   }
@@ -183,6 +187,15 @@ async function computeMetrics(imageBuffer: Buffer): Promise<SkinMetrics> {
   let hueSqDiffSum = 0;
   let gradientSum = 0;
   let gradientCount = 0;
+  let blemishCount = 0;
+  // A "blemish" pixel is both notably redder than this face's own average
+  // complexion AND sits in a texturally rough spot — a localized inflamed,
+  // raised mark, as opposed to overall skin tone (already captured by
+  // rednessIndex) or a smooth flat discoloration (already captured by
+  // darkPatchRatio). Threshold picked in the same units/scale as the
+  // existing specular/dark-patch thresholds just above.
+  const BLEMISH_REDNESS_DELTA = 8;
+  const BLEMISH_GRADIENT_MIN = 25;
 
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
@@ -205,8 +218,12 @@ async function computeMetrics(imageBuffer: Buffer): Promise<SkinMetrics> {
           -luminance[i - width - 1]! + luminance[i - width + 1]! - 2 * luminance[i - 1]! + 2 * luminance[i + 1]! - luminance[i + width - 1]! + luminance[i + width + 1]!;
         const gy =
           -luminance[i - width - 1]! - 2 * luminance[i - width]! - luminance[i - width + 1]! + luminance[i + width - 1]! + 2 * luminance[i + width]! + luminance[i + width + 1]!;
-        gradientSum += Math.sqrt(gx * gx + gy * gy);
+        const gradMag = Math.sqrt(gx * gx + gy * gy);
+        gradientSum += gradMag;
         gradientCount++;
+
+        const pixelRedness = r - (g + b) / 2;
+        if (pixelRedness > rednessIndex + BLEMISH_REDNESS_DELTA && gradMag > BLEMISH_GRADIENT_MIN) blemishCount++;
       }
     }
   }
@@ -222,6 +239,7 @@ async function computeMetrics(imageBuffer: Buffer): Promise<SkinMetrics> {
     darkPatchRatio: darkCount / skinCount,
     rednessIndex,
     textureRoughness: gradientCount > 0 ? gradientSum / gradientCount : 15,
+    blemishRatio: blemishCount / skinCount,
     confident,
   };
 }
@@ -280,7 +298,15 @@ function scoreConcerns(m: SkinMetrics, selfReported: ConcernKey[]): Concern[] {
     add("UNEVEN_TONE", m.hueStdDev / 9);
     add("DULLNESS", (200 - m.meanLuminance) / 24 + (0.35 - m.meanSaturation) * 4);
     add("REDNESS", (m.rednessIndex - 8) / 5);
-    add("ACNE", m.darkPatchRatio * 10 + m.textureRoughness / 12);
+    // Localized inflamed spots (blemishRatio) drive this far more than
+    // overall dark-patch share or texture alone — see BLEMISH_* thresholds
+    // in computeMetrics for what counts as a "blemish" pixel.
+    add("ACNE", m.blemishRatio * 45 + m.darkPatchRatio * 4);
+    // Visible hyperpigmentation + uneven tone are the classic signs of
+    // cumulative UV exposure — flagged here as a forward-looking "start
+    // protecting now" concern, distinct from DARK_SPOTS (existing marks)
+    // and UNEVEN_TONE (current appearance).
+    add("SUN_PROTECTION", m.darkPatchRatio * 14 + m.hueStdDev / 10);
   }
 
   // Self-reported concerns always surface (a customer's own experience
@@ -313,6 +339,7 @@ const TIP_LIBRARY: Record<ConcernKey, string[]> = {
   OILINESS: ["A lightweight, oil-free moisturizer still matters — skipping it can backfire.", "Clay or charcoal masks help absorb excess oil.", "Don't over-cleanse; it can trigger more oil production."],
   UNEVEN_TONE: ["Consistent SPF prevents tone from becoming more uneven.", "Vitamin C and niacinamide both help even out tone.", "Gentle, regular exfoliation supports an even texture."],
   SENSITIVITY: ["Simplify your routine — fewer products means fewer triggers.", "Fragrance-free and hypoallergenic labels are good signals.", "Always patch-test on your inner arm before your face."],
+  SUN_PROTECTION: ["Apply a broad-spectrum SPF 30+ every morning, even indoors or on cloudy days.", "Reapply sunscreen every 2-3 hours during direct sun exposure.", "UV damage is cumulative — consistent daily SPF is the single best way to prevent new dark spots and premature aging."],
 };
 
 function buildSummary(skinType: SkinType, concerns: Concern[], confident: boolean): string {
@@ -381,6 +408,7 @@ export const CONCERN_KEYWORDS: Record<ConcernKey, string[]> = {
   OILINESS: ["oil-control", "oil control", "mattify", "balancing", "oil-free", "sebum"],
   UNEVEN_TONE: ["brightening", "even tone", "vitamin c", "tone", "niacinamide"],
   SENSITIVITY: ["sensitive", "gentle", "fragrance-free", "soothing", "hypoallergenic", "calm"],
+  SUN_PROTECTION: ["spf", "sunscreen", "sun protection", "sun block", "sunblock", "uv protection", "broad spectrum"],
 };
 
 export const SKIN_TYPE_KEYWORDS: Record<SkinType, string[]> = {

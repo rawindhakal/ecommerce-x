@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { Trash2 } from "lucide-react";
+import { api, ApiError } from "@/lib/api";
 import { formatNpr } from "@/lib/format";
+import { toast } from "@/lib/toast-store";
 import type { PaginatedResult } from "@ecommerce-x/shared";
 
 interface Order {
@@ -34,13 +36,30 @@ export default function OrdersPage() {
   const [search, setSearch] = useState("");
 
   async function load() {
-    const qs = new URLSearchParams({ pageSize: "30" });
-    if (status) qs.set("status", status);
-    if (search) qs.set("search", search);
-    setResult(await api.get<PaginatedResult<Order>>(`/api/orders/admin?${qs.toString()}`));
+    try {
+      const qs = new URLSearchParams({ pageSize: "30" });
+      if (status) qs.set("status", status);
+      if (search) qs.set("search", search);
+      setResult(await api.get<PaginatedResult<Order>>(`/api/orders/admin?${qs.toString()}`));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load orders.");
+    }
   }
 
   useEffect(() => { load(); }, [status]);
+
+  async function remove(id: string, orderNumber: string, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`Permanently delete order ${orderNumber}? This removes its items, payments, and status history. This cannot be undone.`)) return;
+    try {
+      await api.delete(`/api/orders/${id}`);
+      toast.success("Order deleted");
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to delete order.");
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -57,7 +76,7 @@ export default function OrdersPage() {
       {/* Desktop table */}
       <div className="card hidden overflow-x-auto md:block">
         <table className="table-base">
-          <thead><tr><th>Order</th><th>Customer</th><th>Channel</th><th>Payment</th><th>Status</th><th>Total</th><th>Date</th></tr></thead>
+          <thead><tr><th>Order</th><th>Customer</th><th>Channel</th><th>Payment</th><th>Status</th><th>Total</th><th>Date</th><th></th></tr></thead>
           <tbody>
             {result?.items.map((o) => (
               <tr key={o.id}>
@@ -68,6 +87,7 @@ export default function OrdersPage() {
                 <td><span className={`badge ${STATUS_COLORS[o.status] ?? "bg-slate-100 text-slate-600"}`}>{o.status}</span></td>
                 <td>{formatNpr(o.total)}</td>
                 <td className="text-slate-500">{new Date(o.createdAt).toLocaleDateString()}</td>
+                <td><button onClick={(e) => remove(o.id, o.orderNumber, e)} className="text-slate-400 hover:text-red-500"><Trash2 size={15} /></button></td>
               </tr>
             ))}
           </tbody>
@@ -87,7 +107,10 @@ export default function OrdersPage() {
               <span className="text-slate-500">{o.channel} · {o.paymentStatus}</span>
               <span className="font-semibold">{formatNpr(o.total)}</span>
             </div>
-            <p className="mt-1 text-xs text-slate-400">{new Date(o.createdAt).toLocaleDateString()}</p>
+            <div className="mt-1 flex items-center justify-between">
+              <p className="text-xs text-slate-400">{new Date(o.createdAt).toLocaleDateString()}</p>
+              <button onClick={(e) => remove(o.id, o.orderNumber, e)} className="flex h-8 w-8 items-center justify-center text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
+            </div>
           </Link>
         ))}
       </div>

@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Search, Plus } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
+import { Spinner } from "@/components/spinner";
+import { toast } from "@/lib/toast-store";
 import { sanitizePhoneInput, type PaginatedResult } from "@ecommerce-x/shared";
 
 interface UserRow {
@@ -26,22 +28,35 @@ export default function CustomersPage() {
   const [search, setSearch] = useState("");
   const [showStaffForm, setShowStaffForm] = useState(false);
   const [staffForm, setStaffForm] = useState({ phone: "", email: "", password: "", firstName: "", lastName: "", role: "STAFF" });
+  const [saving, setSaving] = useState(false);
 
   async function load() {
-    const qs = new URLSearchParams({ pageSize: "30" });
-    if (role) qs.set("role", role);
-    if (search) qs.set("search", search);
-    setResult(await api.get<PaginatedResult<UserRow>>(`/api/users?${qs.toString()}`));
+    try {
+      const qs = new URLSearchParams({ pageSize: "30" });
+      if (role) qs.set("role", role);
+      if (search) qs.set("search", search);
+      setResult(await api.get<PaginatedResult<UserRow>>(`/api/users?${qs.toString()}`));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load customers.");
+    }
   }
 
   useEffect(() => { load(); }, [role]);
 
   async function createStaff(e: React.FormEvent) {
     e.preventDefault();
-    await api.post("/api/users/staff", staffForm);
-    setStaffForm({ phone: "", email: "", password: "", firstName: "", lastName: "", role: "STAFF" });
-    setShowStaffForm(false);
-    load();
+    setSaving(true);
+    try {
+      await api.post("/api/users/staff", staffForm);
+      toast.success("Staff account created");
+      setStaffForm({ phone: "", email: "", password: "", firstName: "", lastName: "", role: "STAFF" });
+      setShowStaffForm(false);
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to create staff account. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -53,12 +68,12 @@ export default function CustomersPage() {
 
       {showStaffForm && (
         <form onSubmit={createStaff} className="card grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
-          <input required placeholder="First name" className="input" value={staffForm.firstName} onChange={(e) => setStaffForm({ ...staffForm, firstName: e.target.value })} />
+          <input required placeholder="First name *" className="input" value={staffForm.firstName} onChange={(e) => setStaffForm({ ...staffForm, firstName: e.target.value })} />
           <input placeholder="Last name" className="input" value={staffForm.lastName} onChange={(e) => setStaffForm({ ...staffForm, lastName: e.target.value })} />
-          <input required type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} placeholder="Phone Number" className="input" value={staffForm.phone} onChange={(e) => setStaffForm({ ...staffForm, phone: sanitizePhoneInput(e.target.value) })} />
+          <input required type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} placeholder="Phone Number *" className="input" value={staffForm.phone} onChange={(e) => setStaffForm({ ...staffForm, phone: sanitizePhoneInput(e.target.value) })} />
           <input type="email" placeholder="Email (optional)" className="input" value={staffForm.email} onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} />
           <div>
-            <input required type="password" placeholder="Password" className="input" value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} />
+            <input required type="password" placeholder="Password *" className="input" value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} />
             <p className="mt-1 text-xs text-slate-400">At least 8 characters, with a letter and a number.</p>
           </div>
           <select className="input" value={staffForm.role} onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}>
@@ -67,7 +82,9 @@ export default function CustomersPage() {
             <option value="ADMIN">Admin</option>
             {currentUser?.role === "SUPERADMIN" && <option value="SUPERADMIN">Super Admin</option>}
           </select>
-          <button type="submit" className="btn-primary sm:col-span-2">Create Account</button>
+          <button type="submit" disabled={saving} className="btn-primary sm:col-span-2">
+            {saving && <Spinner />} {saving ? "Creating…" : "Create Account"}
+          </button>
         </form>
       )}
 

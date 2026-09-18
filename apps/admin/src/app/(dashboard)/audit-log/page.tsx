@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { toast } from "@/lib/toast-store";
 import type { PaginatedResult } from "@ecommerce-x/shared";
 
 interface AuditEntry {
@@ -32,9 +33,13 @@ export default function AuditLogPage() {
   const [action, setAction] = useState("");
 
   async function load() {
-    const qs = new URLSearchParams({ pageSize: "50" });
-    if (action) qs.set("action", action);
-    setResult(await api.get<PaginatedResult<AuditEntry>>(`/api/audit-log?${qs.toString()}`));
+    try {
+      const qs = new URLSearchParams({ pageSize: "50" });
+      if (action) qs.set("action", action);
+      setResult(await api.get<PaginatedResult<AuditEntry>>(`/api/audit-log?${qs.toString()}`));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load audit log.");
+    }
   }
   useEffect(() => { load(); }, [action]);
 

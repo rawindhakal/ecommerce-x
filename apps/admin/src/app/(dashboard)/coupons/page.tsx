@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { formatNpr } from "@/lib/format";
+import { Spinner } from "@/components/spinner";
+import { toast } from "@/lib/toast-store";
 import type { PaginatedResult } from "@ecommerce-x/shared";
 
 interface Coupon {
@@ -24,38 +26,60 @@ export default function CouponsPage() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [form, setForm] = useState<any>(empty);
   const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   async function load() {
-    const res = await api.get<PaginatedResult<Coupon>>("/api/coupons?pageSize=50");
-    setCoupons(res.items);
+    try {
+      const res = await api.get<PaginatedResult<Coupon>>("/api/coupons?pageSize=50");
+      setCoupons(res.items);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load coupons.");
+    }
   }
   useEffect(() => { load(); }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    await api.post("/api/coupons", {
-      code: form.code,
-      type: form.type,
-      value: Number(form.value),
-      minSpend: form.minSpend ? Number(form.minSpend) : undefined,
-      maxDiscount: form.maxDiscount ? Number(form.maxDiscount) : undefined,
-      usageLimit: form.usageLimit ? Number(form.usageLimit) : undefined,
-      expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : undefined,
-    });
-    setForm(empty);
-    setShowForm(false);
-    load();
+    setSaving(true);
+    try {
+      await api.post("/api/coupons", {
+        code: form.code,
+        type: form.type,
+        value: Number(form.value),
+        minSpend: form.minSpend ? Number(form.minSpend) : undefined,
+        maxDiscount: form.maxDiscount ? Number(form.maxDiscount) : undefined,
+        usageLimit: form.usageLimit ? Number(form.usageLimit) : undefined,
+        expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : undefined,
+      });
+      toast.success("Coupon created");
+      setForm(empty);
+      setShowForm(false);
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to create coupon. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggle(c: Coupon) {
-    await api.put(`/api/coupons/${c.id}`, { isActive: !c.isActive });
-    load();
+    try {
+      await api.put(`/api/coupons/${c.id}`, { isActive: !c.isActive });
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to update coupon status.");
+    }
   }
 
   async function remove(id: string) {
     if (!confirm("Delete this coupon?")) return;
-    await api.delete(`/api/coupons/${id}`);
-    load();
+    try {
+      await api.delete(`/api/coupons/${id}`);
+      toast.success("Coupon deleted");
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to delete coupon.");
+    }
   }
 
   return (
@@ -67,18 +91,20 @@ export default function CouponsPage() {
 
       {showForm && (
         <form onSubmit={submit} className="card grid grid-cols-1 gap-4 p-5 sm:grid-cols-3">
-          <input required placeholder="CODE" className="input uppercase" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} />
+          <input required minLength={3} placeholder="CODE *" className="input uppercase" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} />
           <select className="input" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
             <option value="PERCENTAGE">Percentage</option>
             <option value="FIXED_AMOUNT">Fixed Amount</option>
             <option value="FREE_SHIPPING">Free Shipping</option>
           </select>
-          <input required type="number" placeholder="Value" className="input" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} />
+          <input required type="number" placeholder="Value *" className="input" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} />
           <input type="number" placeholder="Min Spend" className="input" value={form.minSpend} onChange={(e) => setForm({ ...form, minSpend: e.target.value })} />
           <input type="number" placeholder="Max Discount" className="input" value={form.maxDiscount} onChange={(e) => setForm({ ...form, maxDiscount: e.target.value })} />
           <input type="number" placeholder="Usage Limit" className="input" value={form.usageLimit} onChange={(e) => setForm({ ...form, usageLimit: e.target.value })} />
           <input type="date" className="input" value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} />
-          <button type="submit" className="btn-primary sm:col-span-3">Create Coupon</button>
+          <button type="submit" disabled={saving} className="btn-primary sm:col-span-3">
+            {saving && <Spinner />} {saving ? "Saving…" : "Create Coupon"}
+          </button>
         </form>
       )}
 

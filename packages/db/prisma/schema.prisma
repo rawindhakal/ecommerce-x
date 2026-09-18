@@ -331,6 +331,27 @@ model ProductImage {
   @@map("product_images")
 }
 
+// A shared asset library: every file uploaded through /api/uploads gets a
+// Media row automatically, so it's immediately reusable everywhere (product
+// images, banners, brand logos, category images, site branding) without
+// re-uploading the same file. Not FK-linked to where it's used (ProductImage
+// etc. just store the url, as before) — deleting a Media row only removes it
+// from the library/picker, it never touches anything already referencing
+// that url elsewhere.
+model Media {
+  id           String   @id @default(cuid())
+  url          String
+  filename     String
+  mimeType     String
+  size         Int
+  altText      String?
+  uploadedById String? // soft reference to User.id — no FK, so it survives user deletion
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("media")
+}
+
 // A variant represents one purchasable SKU, e.g. Shade "Nude 02" / Size "M"
 model ProductVariant {
   id             String   @id @default(cuid())
@@ -742,7 +763,13 @@ model Page {
   id             String     @id @default(cuid())
   title          String
   slug           String     @unique
-  content        String? // rich HTML/markdown
+  content        String? // rich HTML/markdown — used when layoutJson is absent
+  // Drag-and-drop page builder tree (see packages/shared/src/builder.ts for
+  // the BuilderNode shape). When present, the storefront renders this
+  // instead of `content`. The homepage uses a reserved slug ("__home__")
+  // of this same model rather than a separate table — see
+  // apps/web/src/app/page.tsx.
+  layoutJson     Json?
   status         PageStatus @default(DRAFT)
   seoTitle       String?
   seoDescription String?

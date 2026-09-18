@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Trash2, Plus, Upload } from "lucide-react";
-import { api, uploadFile, API_URL } from "@/lib/api";
+import { Pencil, Trash2, Plus, Upload, LibraryBig } from "lucide-react";
+import { slugify } from "@ecommerce-x/shared";
+import { api, uploadFile, ApiError, API_URL } from "@/lib/api";
+import { MediaLibraryPicker } from "@/components/media-library-picker";
+import { FormLabel } from "@/components/form-label";
+import { Spinner } from "@/components/spinner";
+import { toast } from "@/lib/toast-store";
 
 interface Brand {
   id: string;
@@ -24,25 +29,48 @@ export default function BrandsPage() {
   const [form, setForm] = useState<any>(empty);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   async function load() {
-    setBrands(await api.get<Brand[]>("/api/brands?includeInactive=true"));
+    try {
+      setBrands(await api.get<Brand[]>("/api/brands?includeInactive=true"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load brands.");
+    }
   }
   useEffect(() => { load(); }, []);
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = await uploadFile(file);
-    setForm((f: any) => ({ ...f, logoUrl: url }));
+    setUploading(true);
+    try {
+      const url = await uploadFile(file);
+      setForm((f: any) => ({ ...f, logoUrl: url }));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Logo upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (editingId) await api.put(`/api/brands/${editingId}`, form);
-    else await api.post("/api/brands", form);
-    setForm(empty); setEditingId(null); setShowForm(false);
-    load();
+    setSaving(true);
+    try {
+      if (editingId) await api.put(`/api/brands/${editingId}`, form);
+      else await api.post("/api/brands", form);
+      toast.success(editingId ? "Brand updated" : "Brand created");
+      setForm(empty); setEditingId(null); setShowForm(false);
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save brand. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function edit(b: Brand) {
@@ -53,8 +81,13 @@ export default function BrandsPage() {
 
   async function remove(id: string) {
     if (!confirm("Delete this brand?")) return;
-    await api.delete(`/api/brands/${id}`);
-    load();
+    try {
+      await api.delete(`/api/brands/${id}`);
+      toast.success("Brand deleted");
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to delete brand.");
+    }
   }
 
   return (
@@ -66,23 +99,39 @@ export default function BrandsPage() {
 
       {showForm && (
         <form onSubmit={submit} className="card grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
-          <div><label className="label">Name</label><input required className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-          <div><label className="label">Slug</label><input required className="input" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} /></div>
+          <div><FormLabel required>Name</FormLabel><input required className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+          <div>
+            <FormLabel>Slug</FormLabel>
+            <input disabled className="input cursor-not-allowed bg-slate-50 text-slate-500" value={form.slug || (form.name ? slugify(form.name) : "")} placeholder="Generated automatically from the name" />
+          </div>
           <div className="sm:col-span-2">
-            <label className="label">Brand Logo (shown on storefront brand filters &amp; product pages)</label>
+            <FormLabel>Brand Logo (shown on storefront brand filters &amp; product pages)</FormLabel>
             <div className="flex items-center gap-3">
               {form.logoUrl && <img src={imgSrc(form.logoUrl)} alt="" className="h-16 w-16 rounded-lg border border-slate-200 object-contain bg-white p-1" />}
               <label className="btn-outline w-fit cursor-pointer">
-                <Upload size={14} /> {form.logoUrl ? "Replace" : "Upload"} Logo
-                <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                {uploading ? <Spinner /> : <Upload size={14} />} {uploading ? "Uploading…" : form.logoUrl ? "Replace" : "Upload"} Logo
+                <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploading} />
               </label>
+              <button type="button" onClick={() => setShowLibrary(true)} className="btn-outline w-fit">
+                <LibraryBig size={14} /> Browse Library
+              </button>
             </div>
           </div>
-          <div className="sm:col-span-2"><label className="label">SEO Title</label><input className="input" value={form.seoTitle} onChange={(e) => setForm({ ...form, seoTitle: e.target.value })} /></div>
+          <div className="sm:col-span-2"><FormLabel>SEO Title</FormLabel><input className="input" value={form.seoTitle} onChange={(e) => setForm({ ...form, seoTitle: e.target.value })} /></div>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} /> Active</label>
-          <div className="sm:col-span-2"><button type="submit" className="btn-primary">{editingId ? "Update" : "Create"} Brand</button></div>
+          <div className="sm:col-span-2">
+            <button type="submit" disabled={saving} className="btn-primary">
+              {saving && <Spinner />} {saving ? "Saving…" : editingId ? "Update Brand" : "Create Brand"}
+            </button>
+          </div>
         </form>
       )}
+
+      <MediaLibraryPicker
+        open={showLibrary}
+        onClose={() => setShowLibrary(false)}
+        onSelect={([picked]) => setForm((f: any) => ({ ...f, logoUrl: picked.url }))}
+      />
 
       {/* Desktop table */}
       <div className="card hidden overflow-x-auto md:block">

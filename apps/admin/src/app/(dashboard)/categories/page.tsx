@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Trash2, Plus, Upload } from "lucide-react";
-import { api, uploadFile, API_URL } from "@/lib/api";
+import { Pencil, Trash2, Plus, Upload, LibraryBig } from "lucide-react";
+import { slugify } from "@ecommerce-x/shared";
+import { api, uploadFile, ApiError, API_URL } from "@/lib/api";
+import { MediaLibraryPicker } from "@/components/media-library-picker";
+import { FormLabel } from "@/components/form-label";
+import { Spinner } from "@/components/spinner";
+import { toast } from "@/lib/toast-store";
 
 interface Category {
   id: string;
@@ -27,9 +32,16 @@ export default function CategoriesPage() {
   const [form, setForm] = useState<any>(empty);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   async function load() {
-    setCategories(await api.get<Category[]>("/api/categories?includeInactive=true"));
+    try {
+      setCategories(await api.get<Category[]>("/api/categories?includeInactive=true"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load categories.");
+    }
   }
 
   useEffect(() => {
@@ -45,25 +57,46 @@ export default function CategoriesPage() {
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = await uploadFile(file);
-    setForm((f: any) => ({ ...f, imageUrl: url }));
+    setUploading(true);
+    try {
+      const url = await uploadFile(file);
+      setForm((f: any) => ({ ...f, imageUrl: url }));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Image upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const payload = { ...form, parentId: form.parentId || null, sortOrder: Number(form.sortOrder) };
-    if (editingId) await api.put(`/api/categories/${editingId}`, payload);
-    else await api.post("/api/categories", payload);
-    setForm(empty);
-    setEditingId(null);
-    setShowForm(false);
-    load();
+    setSaving(true);
+    try {
+      const payload = { ...form, parentId: form.parentId || null, sortOrder: Number(form.sortOrder) };
+      if (editingId) await api.put(`/api/categories/${editingId}`, payload);
+      else await api.post("/api/categories", payload);
+      toast.success(editingId ? "Category updated" : "Category created");
+      setForm(empty);
+      setEditingId(null);
+      setShowForm(false);
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save category. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
     if (!confirm("Delete this category?")) return;
-    await api.delete(`/api/categories/${id}`);
-    load();
+    try {
+      await api.delete(`/api/categories/${id}`);
+      toast.success("Category deleted");
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to delete category.");
+    }
   }
 
   return (
@@ -78,50 +111,61 @@ export default function CategoriesPage() {
       {showForm && (
         <form onSubmit={submit} className="card grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
           <div>
-            <label className="label">Name</label>
+            <FormLabel required>Name</FormLabel>
             <input required className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </div>
           <div>
-            <label className="label">Slug</label>
-            <input required className="input" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
+            <FormLabel>Slug</FormLabel>
+            <input disabled className="input cursor-not-allowed bg-slate-50 text-slate-500" value={form.slug || (form.name ? slugify(form.name) : "")} placeholder="Generated automatically from the name" />
           </div>
           <div className="sm:col-span-2">
-            <label className="label">Category Image (shown on storefront home &amp; category page)</label>
+            <FormLabel>Category Image (shown on storefront home &amp; category page)</FormLabel>
             <div className="flex items-center gap-3">
               {form.imageUrl && <img src={imgSrc(form.imageUrl)} alt="" className="h-16 w-16 rounded-lg border border-slate-200 object-cover" />}
               <label className="btn-outline w-fit cursor-pointer">
-                <Upload size={14} /> {form.imageUrl ? "Replace" : "Upload"} Image
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                {uploading ? <Spinner /> : <Upload size={14} />} {uploading ? "Uploading…" : form.imageUrl ? "Replace" : "Upload"} Image
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
               </label>
+              <button type="button" onClick={() => setShowLibrary(true)} className="btn-outline w-fit">
+                <LibraryBig size={14} /> Browse Library
+              </button>
             </div>
           </div>
           <div>
-            <label className="label">Parent Category</label>
+            <FormLabel>Parent Category</FormLabel>
             <select className="input" value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.target.value })}>
               <option value="">None (Top-level)</option>
               {categories.filter((c) => c.id !== editingId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="label">Sort Order</label>
+            <FormLabel>Sort Order</FormLabel>
             <input type="number" className="input" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} />
           </div>
           <div>
-            <label className="label">SEO Title</label>
+            <FormLabel>SEO Title</FormLabel>
             <input className="input" value={form.seoTitle} onChange={(e) => setForm({ ...form, seoTitle: e.target.value })} />
           </div>
           <div>
-            <label className="label">SEO Description</label>
+            <FormLabel>SEO Description</FormLabel>
             <input className="input" value={form.seoDescription} onChange={(e) => setForm({ ...form, seoDescription: e.target.value })} />
           </div>
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} /> Active
           </label>
           <div className="sm:col-span-2">
-            <button type="submit" className="btn-primary">{editingId ? "Update" : "Create"} Category</button>
+            <button type="submit" disabled={saving} className="btn-primary">
+              {saving && <Spinner />} {saving ? "Saving…" : editingId ? "Update Category" : "Create Category"}
+            </button>
           </div>
         </form>
       )}
+
+      <MediaLibraryPicker
+        open={showLibrary}
+        onClose={() => setShowLibrary(false)}
+        onSelect={([picked]) => setForm((f: any) => ({ ...f, imageUrl: picked.url }))}
+      />
 
       {/* Desktop table */}
       <div className="card hidden overflow-x-auto md:block">

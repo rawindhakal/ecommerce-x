@@ -4,6 +4,7 @@ import { prisma } from "@ecommerce-x/db";
 import { asyncHandler } from "../../middleware/async-handler.js";
 import { requireAuth, requireRole, ADMIN_ROLES } from "../../middleware/auth.js";
 import { HttpError } from "../../lib/http-error.js";
+import { generateUniqueSlug } from "../../lib/unique-slug.js";
 
 export const brandsRouter = Router();
 
@@ -30,7 +31,8 @@ brandsRouter.get(
 
 const brandSchema = z.object({
   name: z.string().min(1),
-  slug: z.string().min(1),
+  // slug is auto-generated from name server-side, same as Product — not
+  // accepted from the client (see generateUniqueSlug).
   // .nullish() (not just .optional()) because the admin edit form spreads
   // the full brand record — including already-null DB fields — back into
   // the update payload; a plain .optional() rejects an explicit `null`.
@@ -46,7 +48,9 @@ brandsRouter.post(
   requireAuth,
   requireRole(...ADMIN_ROLES),
   asyncHandler(async (req, res) => {
-    const brand = await prisma.brand.create({ data: brandSchema.parse(req.body) });
+    const data = brandSchema.parse(req.body);
+    const slug = await generateUniqueSlug(data.name, (s) => prisma.brand.findUnique({ where: { slug: s }, select: { id: true } }).then(Boolean), "brand");
+    const brand = await prisma.brand.create({ data: { ...data, slug } });
     res.status(201).json(brand);
   })
 );

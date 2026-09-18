@@ -5,10 +5,16 @@ import { ProductDetail } from "@/components/product-detail";
 import { ReviewSection } from "@/components/review-section";
 import { ProductCard, type ProductCardData } from "@/components/product-card";
 import { JsonLd, breadcrumbJsonLd } from "@/components/json-ld";
+import { Accordion } from "@/components/accordion";
 import { imgSrc } from "@/lib/image";
 import type { PaginatedResult } from "@ecommerce-x/shared";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+interface LoyaltyRule {
+  isActive: boolean;
+  earnPointsPerNpr: number;
+}
 
 interface FullProduct {
   id: string;
@@ -19,6 +25,7 @@ interface FullProduct {
   categoryId: string | null;
   category: { name: string; slug: string } | null;
   brand: { name: string; slug: string; logoUrl: string | null } | null;
+  tags: string[];
   basePrice: string;
   avgRating: string;
   reviewCount: number;
@@ -69,9 +76,12 @@ export default async function ProductPage(props: { params: Promise<{ slug: strin
   // or reachable once it's off the storefront listings/sitemap.
   if (!product || product.status !== "ACTIVE") notFound();
 
-  const related = product.category
-    ? await serverGet<PaginatedResult<ProductCardData>>(`/api/products?category=${product.category.slug}&pageSize=4`, 60)
-    : null;
+  const [related, loyaltyRule] = await Promise.all([
+    product.category
+      ? serverGet<PaginatedResult<ProductCardData>>(`/api/products?category=${product.category.slug}&pageSize=4`, 60)
+      : Promise.resolve(null),
+    serverGet<LoyaltyRule>("/api/loyalty/rules", 300),
+  ]);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -95,7 +105,7 @@ export default async function ProductPage(props: { params: Promise<{ slug: strin
   };
 
   return (
-    <div className="container-x py-10">
+    <div className="container-x py-10 pb-24 lg:pb-10">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <JsonLd
         data={breadcrumbJsonLd([
@@ -127,14 +137,43 @@ export default async function ProductPage(props: { params: Promise<{ slug: strin
         images={product.images}
         variants={product.variants}
         brand={product.brand}
+        earnPointsPerNpr={loyaltyRule?.isActive ? loyaltyRule.earnPointsPerNpr : 0}
       />
 
-      {product.description && (
-        <div className="mt-14 max-w-3xl">
-          <h2 className="font-display text-2xl">Description</h2>
-          <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-ink/70">{product.description}</p>
-        </div>
-      )}
+      <div className="mt-14 max-w-3xl">
+        <Accordion
+          sections={[
+            ...(product.description
+              ? [{ title: "Description", content: <p className="whitespace-pre-line">{product.description}</p> }]
+              : []),
+            {
+              title: "Product Details",
+              content: (
+                <dl className="space-y-1.5">
+                  {product.brand && (
+                    <div className="flex gap-2">
+                      <dt className="w-20 flex-shrink-0 text-ink/50">Brand</dt>
+                      <dd>{product.brand.name}</dd>
+                    </div>
+                  )}
+                  {product.category && (
+                    <div className="flex gap-2">
+                      <dt className="w-20 flex-shrink-0 text-ink/50">Category</dt>
+                      <dd>{product.category.name}</dd>
+                    </div>
+                  )}
+                  {product.tags.length > 0 && (
+                    <div className="flex gap-2">
+                      <dt className="w-20 flex-shrink-0 text-ink/50">Tags</dt>
+                      <dd>{product.tags.join(", ")}</dd>
+                    </div>
+                  )}
+                </dl>
+              ),
+            },
+          ]}
+        />
+      </div>
 
       <ReviewSection productId={product.id} initialReviews={product.reviews} avgRating={product.avgRating} reviewCount={product.reviewCount} />
 

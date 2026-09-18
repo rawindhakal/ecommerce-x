@@ -4,6 +4,7 @@ import { prisma } from "@ecommerce-x/db";
 import { asyncHandler } from "../../middleware/async-handler.js";
 import { requireAuth, requireRole, ADMIN_ROLES } from "../../middleware/auth.js";
 import { HttpError } from "../../lib/http-error.js";
+import { generateUniqueSlug } from "../../lib/unique-slug.js";
 
 export const categoriesRouter = Router();
 
@@ -41,7 +42,8 @@ categoriesRouter.get(
 
 const categorySchema = z.object({
   name: z.string().min(1),
-  slug: z.string().min(1),
+  // slug is auto-generated from name server-side, same as Product — not
+  // accepted from the client (see generateUniqueSlug).
   // .nullish() (not just .optional()) because the admin edit form spreads
   // the full category record — including already-null DB fields — back
   // into the update payload; a plain .optional() rejects an explicit `null`.
@@ -64,7 +66,8 @@ categoriesRouter.post(
   requireRole(...ADMIN_ROLES),
   asyncHandler(async (req, res) => {
     const data = categorySchema.parse(req.body);
-    const category = await prisma.category.create({ data });
+    const slug = await generateUniqueSlug(data.name, (s) => prisma.category.findUnique({ where: { slug: s }, select: { id: true } }).then(Boolean), "category");
+    const category = await prisma.category.create({ data: { ...data, slug } });
     res.status(201).json(category);
   })
 );

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api";
+import { Spinner } from "@/components/spinner";
 import { sanitizePhoneInput } from "@ecommerce-x/shared";
 
 export default function LoginPage() {
@@ -43,7 +44,9 @@ export default function LoginPage() {
             <input type="password" required className="input" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           {error && <p className="text-sm text-red-500">{error}</p>}
-          <button type="submit" disabled={loading} className="btn-primary w-full">{loading ? "Signing in…" : "Sign In"}</button>
+          <button type="submit" disabled={loading} className="btn-primary w-full">
+            {loading && <Spinner />} {loading ? "Signing in…" : "Sign In"}
+          </button>
         </form>
       </div>
     </div>

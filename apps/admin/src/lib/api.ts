@@ -70,9 +70,4 @@ export async function uploadFile(file: File): Promise<string> {
   return data.url as string;
 }
 
-export async function generateImage(prompt: string): Promise<string> {
-  const data = await api.post<{ url: string }>("/api/uploads/generate", { prompt });
-  return data.url;
-}
-
 export { API_URL };

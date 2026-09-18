@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { Spinner } from "@/components/spinner";
+import { toast } from "@/lib/toast-store";
 
 interface MenuItem {
   id: string;
@@ -19,23 +21,42 @@ export default function MenusPage() {
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [form, setForm] = useState<any>(empty);
   const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   async function load() {
-    setMenus(await api.get<MenuItem[]>("/api/menus/admin"));
+    try {
+      setMenus(await api.get<MenuItem[]>("/api/menus/admin"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load menu items.");
+    }
   }
   useEffect(() => { load(); }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    await api.post("/api/menus", { ...form, sortOrder: Number(form.sortOrder) });
-    setForm(empty);
-    setShowForm(false);
-    load();
+    setSaving(true);
+    try {
+      await api.post("/api/menus", { ...form, sortOrder: Number(form.sortOrder) });
+      toast.success("Menu item added");
+      setForm(empty);
+      setShowForm(false);
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save menu item. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
-    await api.delete(`/api/menus/${id}`);
-    load();
+    if (!confirm("Delete this menu item?")) return;
+    try {
+      await api.delete(`/api/menus/${id}`);
+      toast.success("Menu item deleted");
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to delete menu item.");
+    }
   }
 
   return (
@@ -52,10 +73,12 @@ export default function MenusPage() {
             <option value="FOOTER">Footer</option>
             <option value="MOBILE">Mobile</option>
           </select>
-          <input required placeholder="Label" className="input" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
-          <input required placeholder="URL (/categories/makeup)" className="input" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
+          <input required placeholder="Label *" className="input" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
+          <input required placeholder="URL (/categories/makeup) *" className="input" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
           <input type="number" placeholder="Sort order" className="input" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} />
-          <button type="submit" className="btn-primary sm:col-span-4">Add Menu Item</button>
+          <button type="submit" disabled={saving} className="btn-primary sm:col-span-4">
+            {saving && <Spinner />} {saving ? "Saving…" : "Add Menu Item"}
+          </button>
         </form>
       )}
 

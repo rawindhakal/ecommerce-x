@@ -28,6 +28,7 @@ const CONCERNS = [
   { value: "OILINESS", label: "Excess oil" },
   { value: "UNEVEN_TONE", label: "Uneven tone" },
   { value: "SENSITIVITY", label: "Sensitivity" },
+  { value: "SUN_PROTECTION", label: "Sun damage / protection" },
 ];
 
 const AGE_RANGES = [

@@ -1,14 +1,13 @@
 import { Router } from "express";
 import multer from "multer";
-import { z } from "zod";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { prisma } from "@ecommerce-x/db";
 import { asyncHandler } from "../../middleware/async-handler.js";
 import { requireAuth, requireRole, ADMIN_ROLES } from "../../middleware/auth.js";
 import { HttpError } from "../../lib/http-error.js";
 import { env } from "../../config/env.js";
-import { generateImageBuffer } from "../../lib/gemini.js";
 
 const uploadDir = path.resolve(env.uploadDir);
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -44,23 +43,19 @@ uploadsRouter.post(
   upload.single("file"),
   asyncHandler(async (req, res) => {
     if (!req.file) throw new HttpError(400, "No file uploaded");
-    res.status(201).json({ url: `/uploads/${req.file.filename}` });
-  })
-);
-
-const MIME_EXT: Record<string, string> = { "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp" };
-
-const generateSchema = z.object({ prompt: z.string().min(3).max(2000) });
-
-uploadsRouter.post(
-  "/generate",
-  requireAuth,
-  requireRole(...ADMIN_ROLES),
-  asyncHandler(async (req, res) => {
-    const { prompt } = generateSchema.parse(req.body);
-    const { buffer, mimeType } = await generateImageBuffer(prompt);
-    const filename = `${crypto.randomUUID()}${MIME_EXT[mimeType] ?? ".png"}`;
-    fs.writeFileSync(path.join(uploadDir, filename), buffer);
-    res.status(201).json({ url: `/uploads/${filename}` });
+    const url = `/uploads/${req.file.filename}`;
+    // Every upload — regardless of which form triggered it (product image,
+    // banner, brand logo, ...) — becomes a reusable Media Library entry, so
+    // it can be picked again elsewhere without re-uploading the same file.
+    await prisma.media.create({
+      data: {
+        url,
+        filename: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        uploadedById: req.user!.id,
+      },
+    });
+    res.status(201).json({ url });
   })
 );

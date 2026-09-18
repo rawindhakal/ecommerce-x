@@ -16,11 +16,12 @@ import {
   PlayCircle,
   LayoutDashboard,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { formatNpr } from "@/lib/format";
 import { sanitizePhoneInput } from "@ecommerce-x/shared";
 import { Receipt80mm, type ReceiptData } from "@/components/receipt-80mm";
 import { PosProductGrid, stockOf, type PosVariant } from "@/components/pos-product-grid";
+import { Spinner } from "@/components/spinner";
 
 interface Location { id: string; name: string; type: string }
 interface Session { id: string; locationId: string; openingBalance: string; openedAt: string; location: Location }
@@ -80,6 +81,8 @@ function toBasketItem(v: PosVariant): BasketItem {
 export default function PosPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [openingBalance, setOpeningBalance] = useState("1000");
+  const [openingSession, setOpeningSession] = useState(false);
+  const [openSessionError, setOpenSessionError] = useState<string | null>(null);
   const [settings, setSettings] = useState<StoreSettings>({});
   const [loyaltyRule, setLoyaltyRule] = useState<LoyaltyRule | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -114,6 +117,8 @@ export default function PosPage() {
   const [sessionSummary, setSessionSummary] = useState<any>(null);
   const [closingBalance, setClosingBalance] = useState("");
   const [closeResult, setCloseResult] = useState<any>(null);
+  const [closingSession, setClosingSession] = useState(false);
+  const [closeSessionError, setCloseSessionError] = useState<string | null>(null);
 
   const barcodeRef = useRef<HTMLInputElement>(null);
 
@@ -155,8 +160,16 @@ export default function PosPage() {
 
   async function openSession(e: React.FormEvent) {
     e.preventDefault();
-    const s = await api.post<Session>("/api/pos/sessions/open", { openingBalance: Number(openingBalance) });
-    setSession(s);
+    setOpeningSession(true);
+    setOpenSessionError(null);
+    try {
+      const s = await api.post<Session>("/api/pos/sessions/open", { openingBalance: Number(openingBalance) });
+      setSession(s);
+    } catch (err) {
+      setOpenSessionError(err instanceof ApiError ? err.message : "Failed to open session. Please try again.");
+    } finally {
+      setOpeningSession(false);
+    }
   }
 
   function addVariantToBasket(v: PosVariant) {
@@ -228,13 +241,18 @@ export default function PosPage() {
 
   async function createCustomer(e: React.FormEvent) {
     e.preventDefault();
-    const created = await api.post<Customer>("/api/pos/customers", newCustomer);
-    setCustomer(created);
-    setShowNewCustomer(false);
-    setShowCustomerSearch(false);
-    setPhoneQuery("");
-    setCustomerResults([]);
-    setNewCustomer({ firstName: "", lastName: "", phone: "" });
+    setError(null);
+    try {
+      const created = await api.post<Customer>("/api/pos/customers", newCustomer);
+      setCustomer(created);
+      setShowNewCustomer(false);
+      setShowCustomerSearch(false);
+      setPhoneQuery("");
+      setCustomerResults([]);
+      setNewCustomer({ firstName: "", lastName: "", phone: "" });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create customer.");
+    }
   }
 
   const subtotal = basket.reduce((sum, b) => sum + b.price * b.quantity, 0);
@@ -332,17 +350,30 @@ export default function PosPage() {
 
   async function openCloseSessionPanel() {
     if (!session) return;
-    const summary = await api.get(`/api/pos/sessions/${session.id}/summary`);
-    setSessionSummary(summary);
-    setClosingBalance("");
-    setCloseResult(null);
-    setShowCloseSession(true);
+    try {
+      const summary = await api.get(`/api/pos/sessions/${session.id}/summary`);
+      setSessionSummary(summary);
+      setClosingBalance("");
+      setCloseResult(null);
+      setCloseSessionError(null);
+      setShowCloseSession(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load session summary.");
+    }
   }
 
   async function submitCloseSession() {
     if (!session) return;
-    const result = await api.put(`/api/pos/sessions/${session.id}/close`, { closingBalance: Number(closingBalance) });
-    setCloseResult(result);
+    setClosingSession(true);
+    setCloseSessionError(null);
+    try {
+      const result = await api.put(`/api/pos/sessions/${session.id}/close`, { closingBalance: Number(closingBalance) });
+      setCloseResult(result);
+    } catch (err) {
+      setCloseSessionError(err instanceof ApiError ? err.message : "Failed to close session. Please try again.");
+    } finally {
+      setClosingSession(false);
+    }
   }
 
   function finishCloseSession() {
@@ -369,8 +400,9 @@ export default function PosPage() {
                 onChange={(e) => setOpeningBalance(e.target.value)}
               />
             </div>
-            <button type="submit" className="min-h-[48px] w-full rounded-lg bg-[var(--pos-green)] font-bold text-black transition hover:bg-[var(--pos-green-hover)]">
-              Start Session
+            {openSessionError && <p className="rounded-lg bg-[var(--pos-red)]/10 px-3 py-2 text-xs text-[var(--pos-red)]">{openSessionError}</p>}
+            <button type="submit" disabled={openingSession} className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-[var(--pos-green)] font-bold text-black transition hover:bg-[var(--pos-green-hover)] disabled:opacity-60">
+              {openingSession && <Spinner />} {openingSession ? "Starting…" : "Start Session"}
             </button>
           </form>
         </div>
@@ -690,7 +722,9 @@ export default function PosPage() {
             </div>
             <div className="mt-4 flex gap-2">
               <button onClick={() => setShowFinalBill(false)} className="min-h-[44px] flex-1 rounded-lg bg-[var(--pos-surface)] text-sm font-semibold text-[var(--pos-text-80)]">Cancel</button>
-              <button onClick={completeSale} disabled={processing} className="min-h-[44px] flex-1 rounded-lg bg-[var(--pos-green)] text-sm font-bold text-black">{processing ? "Processing…" : "Confirm & Print"}</button>
+              <button onClick={completeSale} disabled={processing} className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg bg-[var(--pos-green)] text-sm font-bold text-black">
+                {processing && <Spinner />} {processing ? "Processing…" : "Confirm & Print"}
+              </button>
             </div>
           </div>
         </div>
@@ -719,9 +753,12 @@ export default function PosPage() {
                   <label className="mb-1 block text-xs text-[var(--pos-text-50)]">Counted Cash in Drawer</label>
                   <input type="number" autoFocus className="w-full rounded-lg border border-[var(--pos-line)] bg-[var(--pos-surface)] px-3 py-2 text-sm" value={closingBalance} onChange={(e) => setClosingBalance(e.target.value)} />
                 </div>
+                {closeSessionError && <p className="mt-2 rounded-lg bg-[var(--pos-red)]/10 px-3 py-2 text-xs text-[var(--pos-red)]">{closeSessionError}</p>}
                 <div className="mt-4 flex gap-2">
                   <button onClick={() => setShowCloseSession(false)} className="min-h-[44px] flex-1 rounded-lg bg-[var(--pos-surface)] text-sm font-semibold text-[var(--pos-text-80)]">Cancel</button>
-                  <button onClick={submitCloseSession} disabled={!closingBalance} className="min-h-[44px] flex-1 rounded-lg bg-[var(--pos-green)] text-sm font-bold text-black disabled:opacity-40">Close Session</button>
+                  <button onClick={submitCloseSession} disabled={!closingBalance || closingSession} className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg bg-[var(--pos-green)] text-sm font-bold text-black disabled:opacity-40">
+                    {closingSession && <Spinner />} {closingSession ? "Closing…" : "Close Session"}
+                  </button>
                 </div>
               </>
             ) : (

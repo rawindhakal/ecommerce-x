@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Upload, Pencil, X } from "lucide-react";
+import { Plus, Trash2, Upload, Pencil, X, LibraryBig } from "lucide-react";
 import { api, uploadFile, ApiError, API_URL } from "@/lib/api";
 import { toast } from "@/lib/toast-store";
+import { MediaLibraryPicker } from "@/components/media-library-picker";
 
 interface Banner {
   id: string;
@@ -94,6 +95,7 @@ export default function BannersPage() {
   const [form, setForm] = useState<any>(empty);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [libraryField, setLibraryField] = useState<"imageUrl" | "mobileImageUrl" | null>(null);
 
   async function load() {
     setBanners(await api.get<Banner[]>("/api/banners/admin"));
@@ -269,18 +271,30 @@ export default function BannersPage() {
             <label className="label">Desktop Image</label>
             <p className="mb-1.5 text-xs text-slate-400">Recommended size: {PLACEMENTS.find((p) => p.value === form.placement)?.desktopSize}</p>
             {form.imageUrl && <img src={imgUrl(form.imageUrl)} className="mb-2 h-24 rounded-lg object-cover" />}
-            <label className="btn-outline w-fit cursor-pointer"><Upload size={14} /> Upload<input type="file" accept="image/*" className="hidden" onChange={(e) => handleUpload(e, "imageUrl")} /></label>
+            <div className="flex gap-2">
+              <label className="btn-outline w-fit cursor-pointer"><Upload size={14} /> Upload<input type="file" accept="image/*" className="hidden" onChange={(e) => handleUpload(e, "imageUrl")} /></label>
+              <button type="button" onClick={() => setLibraryField("imageUrl")} className="btn-outline w-fit"><LibraryBig size={14} /> Browse Library</button>
+            </div>
           </div>
           <div>
             <label className="label">Mobile Image (optional — falls back to desktop)</label>
             <p className="mb-1.5 text-xs text-slate-400">Recommended size: {PLACEMENTS.find((p) => p.value === form.placement)?.mobileSize}</p>
             {form.mobileImageUrl && <img src={imgUrl(form.mobileImageUrl)} className="mb-2 h-24 rounded-lg object-cover" />}
-            <label className="btn-outline w-fit cursor-pointer"><Upload size={14} /> Upload<input type="file" accept="image/*" className="hidden" onChange={(e) => handleUpload(e, "mobileImageUrl")} /></label>
+            <div className="flex gap-2">
+              <label className="btn-outline w-fit cursor-pointer"><Upload size={14} /> Upload<input type="file" accept="image/*" className="hidden" onChange={(e) => handleUpload(e, "mobileImageUrl")} /></label>
+              <button type="button" onClick={() => setLibraryField("mobileImageUrl")} className="btn-outline w-fit"><LibraryBig size={14} /> Browse Library</button>
+            </div>
           </div>
 
           <button type="submit" disabled={saving} className="btn-primary sm:col-span-2">{saving ? "Saving…" : editingId ? "Save Changes" : "Create Banner"}</button>
         </form>
       )}
+
+      <MediaLibraryPicker
+        open={libraryField !== null}
+        onClose={() => setLibraryField(null)}
+        onSelect={([picked]) => libraryField && setForm((f: any) => ({ ...f, [libraryField]: picked.url }))}
+      />
 
       {grouped.map((group) => (
         <div key={group.value}>

@@ -2,16 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Upload, Sparkles } from "lucide-react";
-import { api, uploadFile, generateImage, API_URL } from "@/lib/api";
+import { Plus, Trash2, Upload, LibraryBig } from "lucide-react";
+import { slugify } from "@ecommerce-x/shared";
+import { api, uploadFile, ApiError, API_URL } from "@/lib/api";
 import { SuccessModal } from "@/components/success-modal";
+import { MediaLibraryPicker } from "@/components/media-library-picker";
+import { FormLabel } from "@/components/form-label";
+import { Spinner } from "@/components/spinner";
+import { toast } from "@/lib/toast-store";
 
 interface Category { id: string; name: string }
 interface Brand { id: string; name: string }
 
 interface VariantForm {
   id?: string;
-  sku: string;
+  sku: string; // existing SKU, read-only — new variants get one auto-generated on save
   optionsText: string; // "shade:Nude 02" comma separated -> parsed
   price: string;
   compareAtPrice: string;
@@ -62,10 +67,9 @@ export function ProductForm({ initial }: { initial?: any }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [createdName, setCreatedName] = useState<string | null>(null);
-  const [generatingImage, setGeneratingImage] = useState(false);
-  const [genImageError, setGenImageError] = useState<string | null>(null);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const [form, setForm] = useState<ProductFormData>(() => ({
     id: initial?.id,
@@ -109,36 +113,24 @@ export function ProductForm({ initial }: { initial?: any }) {
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = await uploadFile(file);
-    setForm((f) => ({ ...f, images: [...f.images, { url, altText: f.name }] }));
-  }
-
-  async function handleGenerateImage() {
-    if (!form.name.trim()) {
-      setGenImageError("Enter a product name first — it's used to generate the image.");
-      return;
-    }
-    setGeneratingImage(true);
-    setGenImageError(null);
+    setUploading(true);
     try {
-      const prompt = `A clean, modern e-commerce product photo of "${form.name}"${form.shortDescription ? ` — ${form.shortDescription}` : ""}, centered on a plain white studio background, soft even lighting, no text or watermarks.`;
-      const url = await generateImage(prompt);
+      const url = await uploadFile(file);
       setForm((f) => ({ ...f, images: [...f.images, { url, altText: f.name }] }));
-    } catch (err: any) {
-      setGenImageError(err.message ?? "Image generation failed");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Image upload failed. Please try again.");
     } finally {
-      setGeneratingImage(false);
+      setUploading(false);
+      e.target.value = "";
     }
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setError(null);
     try {
       const payload = {
         name: form.name,
-        slug: form.slug,
         description: form.description || undefined,
         shortDescription: form.shortDescription || undefined,
         type: "VARIABLE",
@@ -155,7 +147,7 @@ export function ProductForm({ initial }: { initial?: any }) {
         images: form.images.map((img, idx) => ({ id: img.id, url: img.url, altText: img.altText, sortOrder: idx })),
         variants: form.variants.map((v) => ({
           id: v.id,
-          sku: v.sku,
+          sku: v.sku || undefined, // omitted for new variants — server auto-generates one
           options: parseOptions(v.optionsText),
           price: Number(v.price),
           compareAtPrice: v.compareAtPrice ? Number(v.compareAtPrice) : undefined,
@@ -164,17 +156,23 @@ export function ProductForm({ initial }: { initial?: any }) {
 
       let productId = form.id;
       const isCreate = !form.id;
+      let productData: any;
       if (form.id) {
-        await api.put(`/api/products/${form.id}`, payload);
+        productData = await api.put(`/api/products/${form.id}`, payload);
       } else {
-        const created = await api.post<{ id: string }>("/api/products", payload);
-        productId = created.id;
+        productData = await api.post<any>("/api/products", payload);
+        productId = productData.id;
       }
 
-      // Sync stock for each variant via inventory adjust
-      const productData = await api.get<any>(`/api/products/${form.slug}`);
+      // Sync stock for each variant via inventory adjust. Match by option
+      // set rather than SKU — new variants don't have a client-known SKU
+      // yet (the server just generated one), but their parsed options are
+      // unique and known on both sides.
       for (const v of form.variants) {
-        const match = productData.variants.find((pv: any) => pv.sku === v.sku);
+        const options = parseOptions(v.optionsText);
+        const match = v.id
+          ? productData.variants.find((pv: any) => pv.id === v.id)
+          : productData.variants.find((pv: any) => JSON.stringify(pv.options) === JSON.stringify(options));
         if (!match) continue;
         const currentStock = match.inventory.reduce((s: number, i: any) => s + i.quantityOnHand, 0);
         const target = Number(v.stock || 0);
@@ -187,11 +185,12 @@ export function ProductForm({ initial }: { initial?: any }) {
       if (isCreate) {
         setCreatedName(form.name);
       } else {
+        toast.success("Product updated");
         router.push(`/products/${productId}`);
         router.refresh();
       }
-    } catch (err: any) {
-      setError(err.message ?? "Failed to save product");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save product. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -199,44 +198,45 @@ export function ProductForm({ initial }: { initial?: any }) {
 
   return (
     <form onSubmit={submit} className="space-y-6">
-      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>}
-
       <div className="card grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
-        <div><label className="label">Product Name</label><input required className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-        <div><label className="label">Slug</label><input required className="input" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} /></div>
-        <div className="sm:col-span-2"><label className="label">Short Description</label><input className="input" value={form.shortDescription} onChange={(e) => setForm({ ...form, shortDescription: e.target.value })} /></div>
-        <div className="sm:col-span-2"><label className="label">Description</label><textarea rows={4} className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+        <div><FormLabel required>Product Name</FormLabel><input required className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
         <div>
-          <label className="label">Category</label>
+          <FormLabel>URL Slug</FormLabel>
+          <input disabled className="input cursor-not-allowed bg-slate-50 text-slate-500" value={form.slug || (form.name ? slugify(form.name) : "")} placeholder="Generated automatically from the name" />
+        </div>
+        <div className="sm:col-span-2"><FormLabel>Short Description</FormLabel><input className="input" value={form.shortDescription} onChange={(e) => setForm({ ...form, shortDescription: e.target.value })} /></div>
+        <div className="sm:col-span-2"><FormLabel>Description</FormLabel><textarea rows={4} className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+        <div>
+          <FormLabel>Category</FormLabel>
           <select className="input" value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
             <option value="">None</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="label">Brand</label>
+          <FormLabel>Brand</FormLabel>
           <select className="input" value={form.brandId} onChange={(e) => setForm({ ...form, brandId: e.target.value })}>
             <option value="">None</option>
             {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="label">Base Price (NPR)</label>
+          <FormLabel required>Base Price (NPR)</FormLabel>
           <input required type="number" step="0.01" className="input" value={form.basePrice} onChange={(e) => setForm({ ...form, basePrice: e.target.value })} />
         </div>
         <div>
-          <label className="label">Compare-at Price</label>
+          <FormLabel>Compare-at Price</FormLabel>
           <input type="number" step="0.01" className="input" value={form.compareAtPrice} onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })} />
         </div>
         <div>
-          <label className="label">Status</label>
+          <FormLabel>Status</FormLabel>
           <select className="input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
             <option value="DRAFT">Draft</option>
             <option value="ACTIVE">Active</option>
             <option value="ARCHIVED">Archived</option>
           </select>
         </div>
-        <div className="sm:col-span-2"><label className="label">Tags (comma separated)</label><input className="input" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} /></div>
+        <div className="sm:col-span-2"><FormLabel>Tags (comma separated)</FormLabel><input className="input" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} /></div>
         <label className="flex items-center gap-2 text-sm sm:col-span-2">
           <input type="checkbox" checked={form.isFeatured} onChange={(e) => setForm({ ...form, isFeatured: e.target.checked })} /> Featured product
         </label>
@@ -258,22 +258,29 @@ export function ProductForm({ initial }: { initial?: any }) {
             </div>
           ))}
           <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 text-slate-400 hover:border-brand-400 hover:text-brand-500">
-            <Upload size={18} />
-            <span className="text-xs">Upload</span>
-            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+            {uploading ? <Spinner /> : <Upload size={18} />}
+            <span className="text-xs">{uploading ? "Uploading…" : "Upload"}</span>
+            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
           </label>
           <button
             type="button"
-            onClick={handleGenerateImage}
-            disabled={generatingImage}
-            className="flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 text-slate-400 hover:border-brand-400 hover:text-brand-500 disabled:cursor-wait disabled:opacity-60"
+            onClick={() => setShowLibrary(true)}
+            className="flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 text-slate-400 hover:border-brand-400 hover:text-brand-500"
           >
-            <Sparkles size={18} className={generatingImage ? "animate-pulse" : ""} />
-            <span className="text-xs">{generatingImage ? "Generating…" : "Generate with AI"}</span>
+            <LibraryBig size={18} />
+            <span className="text-xs">Browse Library</span>
           </button>
         </div>
-        {genImageError && <p className="mt-2 text-xs text-red-600">{genImageError}</p>}
       </div>
+
+      <MediaLibraryPicker
+        open={showLibrary}
+        onClose={() => setShowLibrary(false)}
+        multiple
+        onSelect={(picked) =>
+          setForm((f) => ({ ...f, images: [...f.images, ...picked.map((p) => ({ url: p.url, altText: p.altText ?? f.name }))] }))
+        }
+      />
 
       <div className="card p-5">
         <div className="mb-3 flex items-center justify-between">
@@ -284,19 +291,19 @@ export function ProductForm({ initial }: { initial?: any }) {
           {form.variants.map((v, idx) => (
             <div key={idx} className="grid grid-cols-2 gap-3 rounded-lg border border-slate-100 p-3 sm:grid-cols-5">
               <div>
-                <label className="label">SKU</label>
-                <input required className="input" value={v.sku} onChange={(e) => updateVariant(idx, { sku: e.target.value })} />
+                <FormLabel>SKU</FormLabel>
+                <input disabled className="input cursor-not-allowed bg-slate-50 text-slate-500" value={v.sku || "Auto-generated on save"} />
               </div>
               <div>
-                <label className="label">Options (shade:Nude, size:M)</label>
+                <FormLabel>Options (shade:Nude, size:M)</FormLabel>
                 <input className="input" value={v.optionsText} onChange={(e) => updateVariant(idx, { optionsText: e.target.value })} />
               </div>
               <div>
-                <label className="label">Price</label>
+                <FormLabel required>Price</FormLabel>
                 <input required type="number" step="0.01" className="input" value={v.price} onChange={(e) => updateVariant(idx, { price: e.target.value })} />
               </div>
               <div>
-                <label className="label">Stock (default warehouse)</label>
+                <FormLabel>Stock (default warehouse)</FormLabel>
                 <input type="number" className="input" value={v.stock} onChange={(e) => updateVariant(idx, { stock: e.target.value })} />
               </div>
               <div className="flex items-end">
@@ -309,12 +316,14 @@ export function ProductForm({ initial }: { initial?: any }) {
 
       <div className="card grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
         <h3 className="text-sm font-semibold sm:col-span-2">SEO</h3>
-        <div className="sm:col-span-2"><label className="label">SEO Title</label><input className="input" value={form.seoTitle} onChange={(e) => setForm({ ...form, seoTitle: e.target.value })} /></div>
-        <div className="sm:col-span-2"><label className="label">SEO Description</label><textarea rows={2} className="input" value={form.seoDescription} onChange={(e) => setForm({ ...form, seoDescription: e.target.value })} /></div>
-        <div className="sm:col-span-2"><label className="label">SEO Keywords</label><input className="input" value={form.seoKeywords} onChange={(e) => setForm({ ...form, seoKeywords: e.target.value })} /></div>
+        <div className="sm:col-span-2"><FormLabel>SEO Title</FormLabel><input className="input" value={form.seoTitle} onChange={(e) => setForm({ ...form, seoTitle: e.target.value })} /></div>
+        <div className="sm:col-span-2"><FormLabel>SEO Description</FormLabel><textarea rows={2} className="input" value={form.seoDescription} onChange={(e) => setForm({ ...form, seoDescription: e.target.value })} /></div>
+        <div className="sm:col-span-2"><FormLabel>SEO Keywords</FormLabel><input className="input" value={form.seoKeywords} onChange={(e) => setForm({ ...form, seoKeywords: e.target.value })} /></div>
       </div>
 
-      <button type="submit" disabled={saving} className="btn-primary">{saving ? "Saving…" : "Save Product"}</button>
+      <button type="submit" disabled={saving} className="btn-primary">
+        {saving && <Spinner />} {saving ? "Saving…" : "Save Product"}
+      </button>
 
       <SuccessModal
         open={createdName !== null}

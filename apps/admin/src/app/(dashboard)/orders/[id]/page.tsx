@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
-import { api } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
+import { api, ApiError } from "@/lib/api";
 import { formatNpr } from "@/lib/format";
+import { Spinner } from "@/components/spinner";
+import { toast } from "@/lib/toast-store";
 
 interface OrderDetail {
   id: string;
@@ -29,15 +33,21 @@ const STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "READY_FOR_PICKUP", "SHI
 
 export default function OrderDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = use(props.params);
+  const router = useRouter();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [newStatus, setNewStatus] = useState("");
   const [note, setNote] = useState("");
   const [updating, setUpdating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function load() {
-    const data = await api.get<OrderDetail>(`/api/orders/${params.id}`);
-    setOrder(data);
-    setNewStatus(data.status);
+    try {
+      const data = await api.get<OrderDetail>(`/api/orders/${params.id}`);
+      setOrder(data);
+      setNewStatus(data.status);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load order.");
+    }
   }
 
   useEffect(() => { load(); }, [params.id]);
@@ -46,10 +56,27 @@ export default function OrderDetailPage(props: { params: Promise<{ id: string }>
     setUpdating(true);
     try {
       await api.put(`/api/orders/${params.id}/status`, { status: newStatus, note: note || undefined });
+      toast.success("Order status updated");
       setNote("");
       load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to update order status.");
     } finally {
       setUpdating(false);
+    }
+  }
+
+  async function removeOrder() {
+    if (!order) return;
+    if (!confirm(`Permanently delete order ${order.orderNumber}? This removes its items, payments, and status history. This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/api/orders/${params.id}`);
+      toast.success("Order deleted");
+      router.push("/orders");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to delete order.");
+      setDeleting(false);
     }
   }
 
@@ -114,7 +141,9 @@ export default function OrderDetailPage(props: { params: Promise<{ id: string }>
               {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
             <input className="input mt-2" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
-            <button onClick={updateStatus} disabled={updating} className="btn-primary mt-3 w-full">{updating ? "Updating…" : "Update Status"}</button>
+            <button onClick={updateStatus} disabled={updating} className="btn-primary mt-3 w-full">
+              {updating && <Spinner />} {updating ? "Updating…" : "Update Status"}
+            </button>
           </div>
 
           <div className="card p-5">
@@ -124,6 +153,14 @@ export default function OrderDetailPage(props: { params: Promise<{ id: string }>
                 <li key={i}>{h.status} — {new Date(h.createdAt).toLocaleString()} {h.note && `(${h.note})`}</li>
               ))}
             </ul>
+          </div>
+
+          <div className="card border border-red-100 p-5">
+            <h2 className="mb-1 text-sm font-semibold text-red-700">Danger Zone</h2>
+            <p className="mb-3 text-xs text-slate-400">Permanently deletes this order and its items, payments, and status history. To cancel/refund instead, use the status dropdown above.</p>
+            <button onClick={removeOrder} disabled={deleting} className="btn-danger w-full">
+              {deleting ? <Spinner /> : <Trash2 size={14} />} {deleting ? "Deleting…" : "Delete Order"}
+            </button>
           </div>
         </div>
       </div>

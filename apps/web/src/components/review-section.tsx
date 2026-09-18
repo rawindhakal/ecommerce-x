@@ -39,7 +39,7 @@ export function ReviewSection({ productId, initialReviews, avgRating, reviewCoun
   }
 
   return (
-    <div className="mt-16">
+    <div id="reviews" className="mt-16 scroll-mt-20">
       <h2 className="font-display text-2xl">Reviews</h2>
       <div className="mt-2 flex items-center gap-2 text-sm text-ink/60">
         <Star size={16} className="fill-amber-400 text-amber-400" />

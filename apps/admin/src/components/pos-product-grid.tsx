@@ -21,6 +21,14 @@ export function stockOf(v: PosVariant) {
   return v.inventory.reduce((sum, i) => sum + (i.quantityOnHand - i.quantityReserved), 0);
 }
 
+// Variants saved before name auto-derivation shipped may still have a null
+// `name` — fall back to the raw option values so tiles never look identical.
+function variantLabel(v: PosVariant): string | null {
+  if (v.name) return v.name;
+  const values = Object.values(v.options).filter(Boolean);
+  return values.length ? values.join(" / ") : null;
+}
+
 export function PosProductGrid({ variants, onSelect }: { variants: PosVariant[]; onSelect: (v: PosVariant) => void }) {
   if (variants.length === 0) {
     return <p className="py-16 text-center text-sm text-[var(--pos-text-40)]">No products found.</p>;
@@ -31,6 +39,7 @@ export function PosProductGrid({ variants, onSelect }: { variants: PosVariant[];
       {variants.map((v) => {
         const stock = stockOf(v);
         const out = stock <= 0;
+        const label = variantLabel(v);
         return (
           <button
             key={v.id}
@@ -53,7 +62,7 @@ export function PosProductGrid({ variants, onSelect }: { variants: PosVariant[];
             </div>
             <div className="flex-1 px-2.5 py-2">
               <p className="line-clamp-1 text-xs font-semibold text-[var(--pos-text)]">{v.product.name}</p>
-              {v.name && <p className="line-clamp-1 text-[11px] text-[var(--pos-text-50)]">{v.name}</p>}
+              {label && <p className="line-clamp-1 text-[11px] text-[var(--pos-text-50)]">{label}</p>}
               <div className="mt-1 flex items-center justify-between">
                 <span className="text-sm font-bold text-[var(--pos-text)]">{formatNpr(v.price)}</span>
                 <span className="text-[10px] text-[var(--pos-text-40)]">{stock} left</span>

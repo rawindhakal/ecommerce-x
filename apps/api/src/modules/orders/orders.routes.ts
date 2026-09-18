@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "@ecommerce-x/db";
 import { asyncHandler } from "../../middleware/async-handler.js";
-import { optionalAuth, requireAuth, requireRole, STAFF_ROLES } from "../../middleware/auth.js";
+import { optionalAuth, requireAuth, requireRole, STAFF_ROLES, ADMIN_ROLES } from "../../middleware/auth.js";
 import { HttpError } from "../../lib/http-error.js";
 import { getPagination, paginate } from "../../lib/pagination.js";
 import { getOrCreateCart } from "../cart/cart.service.js";
@@ -184,5 +184,23 @@ ordersRouter.put(
       },
     });
     res.json(updated);
+  })
+);
+
+// Admin-only, hard delete. OrderItem/Payment/OrderStatusHistory cascade;
+// LoyaltyTransaction/CreditTransaction just lose their orderId reference
+// (SetNull) so those histories stay intact. This does NOT reverse
+// inventory or loyalty-point side effects — use the CANCELLED/REFUNDED
+// status transition above for that; this is for actually removing a
+// record (e.g. test/duplicate orders), not for order cancellation.
+ordersRouter.delete(
+  "/:id",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  asyncHandler(async (req, res) => {
+    const order = await prisma.order.findUnique({ where: { id: req.params.id as string }, select: { id: true } });
+    if (!order) throw HttpError.notFound("Order not found");
+    await prisma.order.delete({ where: { id: order.id } });
+    res.json({ success: true });
   })
 );

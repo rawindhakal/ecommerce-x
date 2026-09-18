@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { Spinner } from "@/components/spinner";
+import { toast } from "@/lib/toast-store";
 import type { PaginatedResult } from "@ecommerce-x/shared";
 
 interface InventoryRow {
@@ -18,23 +20,39 @@ export default function InventoryPage() {
   const [search, setSearch] = useState("");
   const [adjusting, setAdjusting] = useState<string | null>(null);
   const [adjustQty, setAdjustQty] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function load() {
-    const qs = new URLSearchParams({ pageSize: "50" });
-    if (lowStock) qs.set("lowStock", "true");
-    if (search) qs.set("search", search);
-    setResult(await api.get<PaginatedResult<InventoryRow>>(`/api/inventory?${qs.toString()}`));
+    try {
+      const qs = new URLSearchParams({ pageSize: "50" });
+      if (lowStock) qs.set("lowStock", "true");
+      if (search) qs.set("search", search);
+      setResult(await api.get<PaginatedResult<InventoryRow>>(`/api/inventory?${qs.toString()}`));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load inventory.");
+    }
   }
 
   useEffect(() => { load(); }, [lowStock]);
 
   async function submitAdjust(row: InventoryRow) {
     const change = Number(adjustQty);
-    if (!change) return;
-    await api.post("/api/inventory/adjust", { variantId: row.variant.id, change, reason: "ADJUSTMENT" });
-    setAdjusting(null);
-    setAdjustQty("");
-    load();
+    if (!change) {
+      toast.error("Enter a non-zero adjustment amount.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.post("/api/inventory/adjust", { variantId: row.variant.id, change, reason: "ADJUSTMENT" });
+      toast.success("Stock adjusted");
+      setAdjusting(null);
+      setAdjustQty("");
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to adjust stock. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -69,7 +87,7 @@ export default function InventoryPage() {
                   {adjusting === row.id ? (
                     <div className="flex gap-1">
                       <input autoFocus className="input w-20" type="number" placeholder="+/-" value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} />
-                      <button onClick={() => submitAdjust(row)} className="btn-primary px-2">Save</button>
+                      <button onClick={() => submitAdjust(row)} disabled={saving} className="btn-primary px-2">{saving ? <Spinner /> : "Save"}</button>
                     </div>
                   ) : (
                     <button onClick={() => setAdjusting(row.id)} className="btn-outline px-2 py-1 text-xs">Adjust</button>
@@ -94,7 +112,7 @@ export default function InventoryPage() {
             {adjusting === row.id ? (
               <div className="mt-2 flex gap-2">
                 <input autoFocus className="input" type="number" placeholder="+/-" value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} />
-                <button onClick={() => submitAdjust(row)} className="btn-primary px-3">Save</button>
+                <button onClick={() => submitAdjust(row)} disabled={saving} className="btn-primary px-3">{saving ? <Spinner /> : "Save"}</button>
               </div>
             ) : (
               <button onClick={() => setAdjusting(row.id)} className="btn-outline mt-2 w-full py-2 text-sm">Adjust Stock</button>

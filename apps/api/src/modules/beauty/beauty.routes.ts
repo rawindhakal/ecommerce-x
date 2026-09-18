@@ -25,6 +25,7 @@ const CONCERNS = [
   "OILINESS",
   "UNEVEN_TONE",
   "SENSITIVITY",
+  "SUN_PROTECTION",
 ] as const;
 const AGE_RANGES = ["UNDER_18", "18_24", "25_34", "35_44", "45_PLUS"] as const;
 const CATEGORY_PREFS = ["SKINCARE", "MAKEUP", "BOTH"] as const;

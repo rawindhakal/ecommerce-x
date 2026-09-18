@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Download, Upload, AlertTriangle, DatabaseBackup } from "lucide-react";
 import { API_URL, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
+import { toast } from "@/lib/toast-store";
+import { Spinner } from "@/components/spinner";
 
 interface SafetyBackup {
   filename: string;
@@ -66,8 +68,11 @@ export default function BackupPage() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      toast.success("Backup downloaded");
     } catch (err: any) {
-      setError(err.message ?? "Backup failed");
+      const message = err.message ?? "Backup failed";
+      setError(message);
+      toast.error(message);
     } finally {
       setDownloading(false);
     }
@@ -95,12 +100,15 @@ export default function BackupPage() {
       const body = await res.json();
       if (!res.ok) throw new ApiError(res.status, body.message ?? "Restore failed");
       setResult(`Restore complete. A safety backup of the previous data was saved as "${body.safetyBackup}".`);
+      toast.success("Restore complete");
       setPendingFile(null);
       setConfirmText("");
       if (fileInputRef.current) fileInputRef.current.value = "";
       loadSafetyBackups();
     } catch (err: any) {
-      setError(err.message ?? "Restore failed");
+      const message = err.message ?? "Restore failed";
+      setError(message);
+      toast.error(message);
     } finally {
       setRestoring(false);
     }
@@ -122,7 +130,7 @@ export default function BackupPage() {
           </div>
         </div>
         <button onClick={downloadBackup} disabled={downloading} className="btn-primary mt-4">
-          <Download size={16} /> {downloading ? "Preparing backup…" : "Download Backup"}
+          {downloading ? <Spinner /> : <Download size={16} />} {downloading ? "Preparing backup…" : "Download Backup"}
         </button>
       </div>
 
@@ -158,9 +166,9 @@ export default function BackupPage() {
               <button
                 onClick={confirmRestore}
                 disabled={confirmText !== "RESTORE" || restoring}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-40"
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-40"
               >
-                {restoring ? "Restoring…" : "Restore Now"}
+                {restoring && <Spinner />} {restoring ? "Restoring…" : "Restore Now"}
               </button>
               <button
                 onClick={() => {

@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { serverGet } from "@/lib/server-api";
+import { BuilderRenderer } from "@/components/builder/renderer";
+import type { BuilderTree } from "@ecommerce-x/shared";
 
 interface CmsPage {
   title: string;
   content: string | null;
+  layoutJson: BuilderTree | null;
   seoTitle: string | null;
   seoDescription: string | null;
 }
@@ -20,6 +23,14 @@ export default async function CmsPage(props: { params: Promise<{ slug: string }>
   const params = await props.params;
   const page = await serverGet<CmsPage>(`/api/pages/${params.slug}`, 60);
   if (!page) notFound();
+
+  if (page.layoutJson?.length) {
+    return (
+      <div className="py-6">
+        <BuilderRenderer tree={page.layoutJson} />
+      </div>
+    );
+  }
 
   return (
     <div className="container-x max-w-3xl py-14">

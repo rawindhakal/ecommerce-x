@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Check, X, Star, Trash2 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { toast } from "@/lib/toast-store";
 import type { PaginatedResult } from "@ecommerce-x/shared";
 
 interface Review {
@@ -22,20 +23,34 @@ export default function ReviewsPage() {
   const [status, setStatus] = useState("PENDING");
 
   async function load() {
-    const res = await api.get<PaginatedResult<Review>>(`/api/reviews/admin?status=${status}&pageSize=50`);
-    setReviews(res.items);
+    try {
+      const res = await api.get<PaginatedResult<Review>>(`/api/reviews/admin?status=${status}&pageSize=50`);
+      setReviews(res.items);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load reviews.");
+    }
   }
   useEffect(() => { load(); }, [status]);
 
   async function setReviewStatus(id: string, s: string) {
-    await api.put(`/api/reviews/${id}/status`, { status: s });
-    load();
+    try {
+      await api.put(`/api/reviews/${id}/status`, { status: s });
+      toast.success(s === "APPROVED" ? "Review approved" : "Review rejected");
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to update review status.");
+    }
   }
 
   async function remove(id: string) {
     if (!confirm("Delete this review?")) return;
-    await api.delete(`/api/reviews/${id}`);
-    load();
+    try {
+      await api.delete(`/api/reviews/${id}`);
+      toast.success("Review deleted");
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to delete review.");
+    }
   }
 
   return (

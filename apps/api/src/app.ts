@@ -24,6 +24,7 @@ import { pagesRouter } from "./modules/cms/pages.routes.js";
 import { bannersRouter } from "./modules/cms/banners.routes.js";
 import { menusRouter } from "./modules/cms/menus.routes.js";
 import { uploadsRouter } from "./modules/uploads/uploads.routes.js";
+import { mediaRouter } from "./modules/media/media.routes.js";
 import { usersRouter } from "./modules/users/users.routes.js";
 import { addressesRouter } from "./modules/customers/addresses.routes.js";
 import { wishlistRouter } from "./modules/customers/wishlist.routes.js";
@@ -83,6 +84,7 @@ export function createApp() {
   app.use("/api/banners", bannersRouter);
   app.use("/api/menus", menusRouter);
   app.use("/api/uploads", uploadsRouter);
+  app.use("/api/media", mediaRouter);
   app.use("/api/users", usersRouter);
   app.use("/api/addresses", addressesRouter);
   app.use("/api/wishlist", wishlistRouter);
